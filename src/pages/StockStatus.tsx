@@ -1,0 +1,177 @@
+import * as React from "react"
+import { ArrowDownCircle, ArrowUpCircle, Package2 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { AddMaterialDialog } from "@/components/AddMaterialDialog"
+import { StockMovementDialog } from "@/components/StockMovementDialog"
+import { MaterialHistorySheet } from "@/components/MaterialHistorySheet"
+import { supabase } from "@/lib/supabase"
+import { UNITS, type RawMaterial } from "@/lib/types"
+
+export function StockStatus() {
+  const [materials, setMaterials] = React.useState<RawMaterial[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [movement, setMovement] = React.useState<{ material: RawMaterial; type: "IN" | "OUT" } | null>(null)
+  const [historyMaterial, setHistoryMaterial] = React.useState<RawMaterial | null>(null)
+
+  async function load() {
+    const { data } = await supabase
+      .from("raw_materials")
+      .select("*")
+      .order("name")
+    setMaterials((data as RawMaterial[]) ?? [])
+    setLoading(false)
+  }
+
+  React.useEffect(() => {
+    load()
+  }, [])
+
+  function openMovement(material: RawMaterial, type: "IN" | "OUT") {
+    setMovement({ material, type })
+  }
+
+  function closeMovement() {
+    setMovement(null)
+  }
+
+  async function handleMovementDone() {
+    closeMovement()
+    setLoading(true)
+    await load()
+  }
+
+  return (
+    <div className="flex flex-col gap-6 p-6 max-w-5xl mx-auto w-full">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">Stock Status</h1>
+          <p className="text-muted-foreground mt-1">
+            Manage raw materials and record stock movements.{" "}
+            <span className="text-xs">Click a material name to view its history.</span>
+          </p>
+        </div>
+        <AddMaterialDialog onCreated={load} />
+      </div>
+
+      {loading ? (
+        <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+          {[...Array(5)].map((_, i) => (
+            <Skeleton key={i} className="h-12 w-full" />
+          ))}
+        </div>
+      ) : materials.length === 0 ? (
+        <div className="rounded-xl border bg-card">
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <Package2 />
+              </EmptyMedia>
+              <EmptyTitle>No materials yet</EmptyTitle>
+              <EmptyDescription>
+                Add your first raw material to start tracking inventory.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        </div>
+      ) : (
+        <div className="rounded-xl border bg-card overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Material</TableHead>
+                <TableHead>Unit</TableHead>
+                <TableHead className="text-right">Current Stock</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {materials.map((m) => {
+                const unitLabel = UNITS.find((u) => u.value === m.unit_of_measure)?.label ?? m.unit_of_measure
+                const isEmpty = m.current_quantity === 0
+                return (
+                  <TableRow key={m.id}>
+                    <TableCell>
+                      <button
+                        onClick={() => setHistoryMaterial(m)}
+                        className="font-medium text-left underline-offset-4 hover:underline hover:text-primary transition-colors cursor-pointer"
+                      >
+                        {m.name}
+                      </button>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs font-normal">
+                        {unitLabel}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className={isEmpty ? "text-destructive font-medium" : "font-medium"}>
+                        {m.current_quantity}
+                        <span className="text-muted-foreground font-normal ml-1 text-xs">
+                          {m.unit_of_measure}
+                        </span>
+                      </span>
+                      {isEmpty && (
+                        <Badge
+                          variant="outline"
+                          className="ml-2 text-destructive border-destructive/30 text-xs"
+                        >
+                          Out of stock
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 text-emerald-600 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 dark:border-emerald-900 dark:hover:bg-emerald-950 dark:text-emerald-400"
+                          onClick={() => openMovement(m, "IN")}
+                        >
+                          <ArrowUpCircle className="size-3.5" />
+                          Add
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700 dark:border-amber-900 dark:hover:bg-amber-950 dark:text-amber-400"
+                          disabled={isEmpty}
+                          onClick={() => openMovement(m, "OUT")}
+                        >
+                          <ArrowDownCircle className="size-3.5" />
+                          Use
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      <StockMovementDialog
+        material={movement?.material ?? null}
+        type={movement?.type ?? "IN"}
+        onClose={closeMovement}
+        onDone={handleMovementDone}
+      />
+
+      <MaterialHistorySheet
+        material={historyMaterial}
+        onClose={() => setHistoryMaterial(null)}
+      />
+    </div>
+  )
+}
