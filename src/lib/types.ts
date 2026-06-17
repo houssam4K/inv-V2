@@ -55,3 +55,44 @@ export interface ProductionEntry {
   quantity: number
   created_at: string
 }
+
+export interface Supplier {
+  id: string
+  name: string
+  contact_person: string | null
+  phone: string | null
+  email: string | null
+  created_at: string
+}
+
+export interface Shipment {
+  id: string
+  supplier_id: string
+  raw_material_id: string
+  quantity: number
+  unit_price: number
+  invoice_number: string | null
+  date: string
+  note: string | null
+  created_at: string
+}
+
+export type PackagingType = "box" | "pallet" | "mandrin"
+
+export const PACKAGING_TYPES: { value: PackagingType; label: string }[] = [
+  { value: "box", label: "Box" },
+  { value: "pallet", label: "Pallet" },
+  { value: "mandrin", label: "Mandrin" },
+]
+
+export interface PackagingTransaction {
+  id: string
+  supplier_id: string
+  transaction_type: "SENT" | "RETURNED"
+  packaging_type: PackagingType
+  quantity: number
+  date: string
+  shipment_id: string | null
+  note: string | null
+  created_at: string
+}

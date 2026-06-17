@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Factory, LayoutDashboard, Package } from "lucide-react"
+import { Building2, Factory, LayoutDashboard, Package, TrendingUp } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -19,13 +19,17 @@ import { ModeToggle } from "@/components/mode-toggle"
 import { Dashboard } from "@/pages/Dashboard"
 import { StockStatus } from "@/pages/StockStatus"
 import { Production } from "@/pages/Production"
+import { Suppliers } from "@/pages/Suppliers"
+import { Finance } from "@/pages/Finance"
 
-type Page = "dashboard" | "stock-status" | "production"
+type Page = "dashboard" | "stock-status" | "production" | "suppliers" | "finance"
 
 const NAV_ITEMS: { id: Page; label: string; icon: React.ElementType }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "stock-status", label: "Stock Status", icon: Package },
   { id: "production", label: "Production", icon: Factory },
+  { id: "suppliers", label: "Suppliers", icon: Building2 },
+  { id: "finance", label: "Finance", icon: TrendingUp },
 ]
 
 export function App() {
@@ -83,6 +87,8 @@ export function App() {
           {page === "dashboard" && <Dashboard />}
           {page === "stock-status" && <StockStatus />}
           {page === "production" && <Production />}
+          {page === "suppliers" && <Suppliers />}
+          {page === "finance" && <Finance />}
         </main>
       </SidebarInset>
     </SidebarProvider>
