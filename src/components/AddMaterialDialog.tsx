@@ -30,6 +30,7 @@ export function AddMaterialDialog({ onCreated }: Props) {
   const [open, setOpen] = React.useState(false)
   const [name, setName] = React.useState("")
   const [unit, setUnit] = React.useState<UnitOfMeasure | "">("")
+  const [openingStock, setOpeningStock] = React.useState("")
   const [dailyConsumption, setDailyConsumption] = React.useState("")
   const [error, setError] = React.useState("")
   const [loading, setLoading] = React.useState(false)
@@ -37,6 +38,7 @@ export function AddMaterialDialog({ onCreated }: Props) {
   function reset() {
     setName("")
     setUnit("")
+    setOpeningStock("")
     setDailyConsumption("")
     setError("")
   }
@@ -54,6 +56,12 @@ export function AddMaterialDialog({ onCreated }: Props) {
       return
     }
 
+    const os = openingStock.trim() !== "" ? parseFloat(openingStock) : 0
+    if (isNaN(os) || os < 0) {
+      setError("Opening stock must be 0 or more.")
+      return
+    }
+
     const dc = dailyConsumption.trim() !== "" ? parseFloat(dailyConsumption) : null
     if (dc !== null && (isNaN(dc) || dc < 0)) {
       setError("Daily consumption must be a positive number.")
@@ -61,15 +69,20 @@ export function AddMaterialDialog({ onCreated }: Props) {
     }
 
     setLoading(true)
-    const { error: dbError } = await supabase.from("raw_materials").insert({
-      name: name.trim(),
-      unit_of_measure: unit,
-      current_quantity: 0,
-      daily_consumption: dc,
-    })
-    setLoading(false)
+
+    const { data: matData, error: dbError } = await supabase
+      .from("raw_materials")
+      .insert({
+        name: name.trim(),
+        unit_of_measure: unit,
+        current_quantity: os,
+        daily_consumption: dc,
+      })
+      .select("id")
+      .single()
 
     if (dbError) {
+      setLoading(false)
       if (dbError.code === "23505") {
         setError("A material with this name already exists.")
       } else {
@@ -78,6 +91,18 @@ export function AddMaterialDialog({ onCreated }: Props) {
       return
     }
 
+    // Record opening stock as an initial stock movement
+    if (os > 0 && matData) {
+      await supabase.from("stock_movements").insert({
+        raw_material_id: matData.id,
+        movement_type: "IN",
+        quantity: os,
+        date: new Date().toISOString(),
+        note: "Opening stock",
+      })
+    }
+
+    setLoading(false)
     reset()
     setOpen(false)
     onCreated()
@@ -136,6 +161,24 @@ export function AddMaterialDialog({ onCreated }: Props) {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="mat-os">
+              Stock initial{" "}
+              <span className="text-muted-foreground font-normal">(optional, default 0)</span>
+            </Label>
+            <Input
+              id="mat-os"
+              type="number"
+              min="0"
+              step="any"
+              placeholder="e.g. 5000"
+              value={openingStock}
+              onChange={(e) => setOpeningStock(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground -mt-1">
+              Current quantity you already have in stock.
+            </p>
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="mat-dc">

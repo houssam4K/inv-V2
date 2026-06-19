@@ -211,7 +211,18 @@ function PackagingBalanceSection({ transactions, supplierName }: { transactions:
     return { type: pt.value, label: pt.label, sent, returned, balance: sent - returned }
   })
 
-  const history = [...transactions].sort((a, b) => b.date.localeCompare(a.date))
+  // Group transactions by (date, transaction_type) for compact display
+  const groupedHistory = React.useMemo(() => {
+    const map = new Map<string, PackagingTransaction[]>()
+    for (const t of transactions) {
+      const key = `${t.date.slice(0, 10)}_${t.transaction_type}`
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(t)
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([, items]) => items)
+  }, [transactions])
 
   function handleExport() {
     exportPackagingPDF(supplierName, transactions)
@@ -267,7 +278,7 @@ function PackagingBalanceSection({ transactions, supplierName }: { transactions:
       </div>
 
       {/* Transaction history */}
-      {history.length > 0 && (
+      {groupedHistory.length > 0 && (
         <div className="flex flex-col gap-2">
           <p className="text-sm font-medium text-muted-foreground">Transaction History</p>
           <div className="rounded-xl border bg-card overflow-hidden">
@@ -277,17 +288,25 @@ function PackagingBalanceSection({ transactions, supplierName }: { transactions:
                   <TableHead>Date</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Packaging</TableHead>
-                  <TableHead className="text-right">Qty</TableHead>
                   <TableHead>Note</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {history.map((t) => {
-                  const isSent = t.transaction_type === "SENT"
-                  const ptLabel = PACKAGING_TYPES.find((p) => p.value === t.packaging_type)?.label ?? t.packaging_type
+                {groupedHistory.map((group) => {
+                  const first = group[0]
+                  const isSent = first.transaction_type === "SENT"
+                  const parts = PACKAGING_TYPES
+                    .map((pt) => {
+                      const total = group
+                        .filter((t) => t.packaging_type === pt.value)
+                        .reduce((acc, t) => acc + t.quantity, 0)
+                      return total > 0 ? `${total} ${pt.label.toLowerCase()}` : null
+                    })
+                    .filter(Boolean)
+                  const note = group.find((t) => t.note)?.note ?? null
                   return (
-                    <TableRow key={t.id}>
-                      <TableCell className="text-sm">{formatDate(t.date)}</TableCell>
+                    <TableRow key={`${first.date.slice(0, 10)}_${first.transaction_type}`}>
+                      <TableCell className="text-sm">{formatDate(first.date)}</TableCell>
                       <TableCell>
                         <Badge
                           variant="outline"
@@ -300,9 +319,10 @@ function PackagingBalanceSection({ transactions, supplierName }: { transactions:
                           {isSent ? "Sent" : "Returned"}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm">{ptLabel}</TableCell>
-                      <TableCell className="text-right font-medium tabular-nums">{t.quantity}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{t.note ?? "—"}</TableCell>
+                      <TableCell className="text-sm">
+                        {parts.join(" · ") || "—"}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{note ?? "—"}</TableCell>
                     </TableRow>
                   )
                 })}
@@ -312,7 +332,7 @@ function PackagingBalanceSection({ transactions, supplierName }: { transactions:
         </div>
       )}
 
-      {history.length === 0 && (
+      {groupedHistory.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <Package className="size-10 text-muted-foreground/30 mb-3" />
           <p className="text-sm font-medium text-muted-foreground">No packaging transactions yet</p>

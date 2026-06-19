@@ -72,10 +72,16 @@ function ForecastChart({ currentStock, dailyConsumption, unit }: {
   dailyConsumption: number
   unit: string
 }) {
-  const data = Array.from({ length: 8 }, (_, i) => ({
-    day: i === 0 ? "Today" : `J+${i}`,
-    stock: Math.max(0, currentStock - dailyConsumption * i),
-  }))
+  const today = new Date()
+  const data = Array.from({ length: 8 }, (_, i) => {
+    const d = new Date(today)
+    d.setDate(d.getDate() + i)
+    const label = d.toLocaleDateString("fr-DZ", { day: "numeric", month: "short" })
+    return {
+      day: label,
+      stock: Math.max(0, currentStock - dailyConsumption * i),
+    }
+  })
 
   return (
     <div className="rounded-xl border bg-card p-4 flex flex-col gap-3">
