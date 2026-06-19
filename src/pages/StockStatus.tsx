@@ -15,6 +15,7 @@ import {
 import { AddMaterialDialog } from "@/components/AddMaterialDialog"
 import { StockMovementDialog } from "@/components/StockMovementDialog"
 import { MaterialHistorySheet } from "@/components/MaterialHistorySheet"
+import { MaterialDetail } from "@/pages/MaterialDetail"
 import { supabase } from "@/lib/supabase"
 import { UNITS, type RawMaterial } from "@/lib/types"
 
@@ -23,6 +24,7 @@ export function StockStatus() {
   const [loading, setLoading] = React.useState(true)
   const [movement, setMovement] = React.useState<{ material: RawMaterial; type: "IN" | "OUT" } | null>(null)
   const [historyMaterial, setHistoryMaterial] = React.useState<RawMaterial | null>(null)
+  const [detailMaterial, setDetailMaterial] = React.useState<RawMaterial | null>(null)
 
   async function load() {
     const { data } = await supabase
@@ -51,6 +53,21 @@ export function StockStatus() {
     await load()
   }
 
+  function handleMaterialUpdated(updated: RawMaterial) {
+    setMaterials((prev) => prev.map((m) => m.id === updated.id ? updated : m))
+    setDetailMaterial(updated)
+  }
+
+  if (detailMaterial) {
+    return (
+      <MaterialDetail
+        material={detailMaterial}
+        onBack={() => setDetailMaterial(null)}
+        onUpdated={handleMaterialUpdated}
+      />
+    )
+  }
+
   return (
     <div className="flex flex-col gap-6 p-6 max-w-5xl mx-auto w-full">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -58,7 +75,7 @@ export function StockStatus() {
           <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">Stock Status</h1>
           <p className="text-muted-foreground mt-1">
             Manage raw materials and record stock movements.{" "}
-            <span className="text-xs">Click a material name to view its history.</span>
+            <span className="text-xs">Click a material name for detailed history and forecasting.</span>
           </p>
         </div>
         <AddMaterialDialog onCreated={load} />
@@ -103,7 +120,7 @@ export function StockStatus() {
                   <TableRow key={m.id}>
                     <TableCell>
                       <button
-                        onClick={() => setHistoryMaterial(m)}
+                        onClick={() => setDetailMaterial(m)}
                         className="font-medium text-left underline-offset-4 hover:underline hover:text-primary transition-colors cursor-pointer"
                       >
                         {m.name}

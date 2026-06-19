@@ -362,6 +362,18 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
 
   const totalSpend = shipments.reduce((acc, s) => acc + s.quantity * s.unit_price, 0)
 
+  // Map shipment_id → SENT packaging for inline display in the shipment table
+  const packagingByShipment = React.useMemo(() => {
+    const map = new Map<string, PackagingTransaction[]>()
+    for (const t of packaging) {
+      if (t.transaction_type === "SENT" && t.shipment_id) {
+        if (!map.has(t.shipment_id)) map.set(t.shipment_id, [])
+        map.get(t.shipment_id)!.push(t)
+      }
+    }
+    return map
+  }, [packaging])
+
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
@@ -465,42 +477,59 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
                       <TableHead className="text-right">Unit Price</TableHead>
                       <TableHead className="text-right">Total</TableHead>
                       <TableHead>Invoice</TableHead>
+                      <TableHead>Packaging</TableHead>
                       <TableHead>Note</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {shipments.map((s) => (
-                      <TableRow key={s.id}>
-                        <TableCell className="text-sm">{formatDate(s.date)}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="text-sm font-medium">{s.raw_materials.name}</span>
-                            <span className="text-xs text-muted-foreground">{s.raw_materials.unit_of_measure}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums font-medium">
-                          {s.quantity}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums text-sm text-muted-foreground">
-                          {s.unit_price > 0 ? formatCurrency(s.unit_price) : "—"}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums font-semibold">
-                          {s.unit_price > 0 ? formatCurrency(s.quantity * s.unit_price) : "—"}
-                        </TableCell>
-                        <TableCell>
-                          {s.invoice_number ? (
-                            <Badge variant="outline" className="text-xs font-mono">
-                              {s.invoice_number}
-                            </Badge>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground max-w-[160px] truncate">
-                          {s.note ?? "—"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {shipments.map((s) => {
+                      const shipPkg = packagingByShipment.get(s.id) ?? []
+                      const pkgParts = PACKAGING_TYPES
+                        .map((pt) => {
+                          const total = shipPkg
+                            .filter((t) => t.packaging_type === pt.value)
+                            .reduce((acc, t) => acc + t.quantity, 0)
+                          return total > 0 ? `${total} ${pt.label.toLowerCase()}` : null
+                        })
+                        .filter(Boolean)
+                      return (
+                        <TableRow key={s.id}>
+                          <TableCell className="text-sm">{formatDate(s.date)}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="text-sm font-medium">{s.raw_materials.name}</span>
+                              <span className="text-xs text-muted-foreground">{s.raw_materials.unit_of_measure}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums font-medium">
+                            {s.quantity}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums text-sm text-muted-foreground">
+                            {s.unit_price > 0 ? formatCurrency(s.unit_price) : "—"}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums font-semibold">
+                            {s.unit_price > 0 ? formatCurrency(s.quantity * s.unit_price) : "—"}
+                          </TableCell>
+                          <TableCell>
+                            {s.invoice_number ? (
+                              <Badge variant="outline" className="text-xs font-mono">
+                                {s.invoice_number}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {pkgParts.length > 0
+                              ? pkgParts.join(" · ")
+                              : "—"}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground max-w-[160px] truncate">
+                            {s.note ?? "—"}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               </div>

@@ -13,6 +13,7 @@ export interface RawMaterial {
   name: string
   unit_of_measure: UnitOfMeasure
   current_quantity: number
+  daily_consumption: number | null
   created_at: string
 }
 

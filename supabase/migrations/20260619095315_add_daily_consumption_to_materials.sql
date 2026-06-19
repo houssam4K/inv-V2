@@ -1,0 +1,1 @@
+ALTER TABLE raw_materials ADD COLUMN IF NOT EXISTS daily_consumption numeric NULL;

@@ -30,12 +30,14 @@ export function AddMaterialDialog({ onCreated }: Props) {
   const [open, setOpen] = React.useState(false)
   const [name, setName] = React.useState("")
   const [unit, setUnit] = React.useState<UnitOfMeasure | "">("")
+  const [dailyConsumption, setDailyConsumption] = React.useState("")
   const [error, setError] = React.useState("")
   const [loading, setLoading] = React.useState(false)
 
   function reset() {
     setName("")
     setUnit("")
+    setDailyConsumption("")
     setError("")
   }
 
@@ -52,11 +54,18 @@ export function AddMaterialDialog({ onCreated }: Props) {
       return
     }
 
+    const dc = dailyConsumption.trim() !== "" ? parseFloat(dailyConsumption) : null
+    if (dc !== null && (isNaN(dc) || dc < 0)) {
+      setError("Daily consumption must be a positive number.")
+      return
+    }
+
     setLoading(true)
     const { error: dbError } = await supabase.from("raw_materials").insert({
       name: name.trim(),
       unit_of_measure: unit,
       current_quantity: 0,
+      daily_consumption: dc,
     })
     setLoading(false)
 
@@ -127,6 +136,24 @@ export function AddMaterialDialog({ onCreated }: Props) {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="mat-dc">
+              Consommation par jour{" "}
+              <span className="text-muted-foreground font-normal">(optional)</span>
+            </Label>
+            <Input
+              id="mat-dc"
+              type="number"
+              min="0"
+              step="any"
+              placeholder="e.g. 500"
+              value={dailyConsumption}
+              onChange={(e) => setDailyConsumption(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground -mt-1">
+              Used to calculate days remaining and forecast stock.
+            </p>
           </div>
           {error && (
             <p className="text-sm text-destructive">{error}</p>
