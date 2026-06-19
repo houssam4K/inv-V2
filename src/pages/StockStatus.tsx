@@ -1,5 +1,5 @@
 import * as React from "react"
-import { ArrowDownCircle, ArrowUpCircle, Package2 } from "lucide-react"
+import { ArrowDownCircle, ArrowUpCircle, MoreHorizontal, Package2, Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -12,7 +12,25 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { AddMaterialDialog } from "@/components/AddMaterialDialog"
+import { EditMaterialDialog } from "@/components/EditMaterialDialog"
 import { StockMovementDialog } from "@/components/StockMovementDialog"
 import { MaterialHistorySheet } from "@/components/MaterialHistorySheet"
 import { MaterialDetail } from "@/pages/MaterialDetail"
@@ -25,6 +43,9 @@ export function StockStatus() {
   const [movement, setMovement] = React.useState<{ material: RawMaterial; type: "IN" | "OUT" } | null>(null)
   const [historyMaterial, setHistoryMaterial] = React.useState<RawMaterial | null>(null)
   const [detailMaterial, setDetailMaterial] = React.useState<RawMaterial | null>(null)
+  const [editMaterial, setEditMaterial] = React.useState<RawMaterial | null>(null)
+  const [deleteTarget, setDeleteTarget] = React.useState<RawMaterial | null>(null)
+  const [deleting, setDeleting] = React.useState(false)
 
   async function load() {
     const { data } = await supabase
@@ -35,20 +56,14 @@ export function StockStatus() {
     setLoading(false)
   }
 
-  React.useEffect(() => {
-    load()
-  }, [])
+  React.useEffect(() => { load() }, [])
 
   function openMovement(material: RawMaterial, type: "IN" | "OUT") {
     setMovement({ material, type })
   }
 
-  function closeMovement() {
-    setMovement(null)
-  }
-
   async function handleMovementDone() {
-    closeMovement()
+    setMovement(null)
     setLoading(true)
     await load()
   }
@@ -56,6 +71,22 @@ export function StockStatus() {
   function handleMaterialUpdated(updated: RawMaterial) {
     setMaterials((prev) => prev.map((m) => m.id === updated.id ? updated : m))
     setDetailMaterial(updated)
+  }
+
+  function handleEditSaved(updated: RawMaterial) {
+    setMaterials((prev) => prev.map((m) => m.id === updated.id ? updated : m))
+    if (detailMaterial?.id === updated.id) setDetailMaterial(updated)
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    // stock_movements cascade-delete automatically (ON DELETE CASCADE)
+    await supabase.from("raw_materials").delete().eq("id", deleteTarget.id)
+    setDeleting(false)
+    setDeleteTarget(null)
+    if (detailMaterial?.id === deleteTarget.id) setDetailMaterial(null)
+    await load()
   }
 
   if (detailMaterial) {
@@ -168,6 +199,27 @@ export function StockStatus() {
                           <ArrowDownCircle className="size-3.5" />
                           Use
                         </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="sm" variant="ghost" className="size-8 p-0">
+                              <MoreHorizontal className="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setEditMaterial(m)}>
+                              <Pencil className="size-3.5 mr-2" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => setDeleteTarget(m)}
+                            >
+                              <Trash2 className="size-3.5 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -181,7 +233,7 @@ export function StockStatus() {
       <StockMovementDialog
         material={movement?.material ?? null}
         type={movement?.type ?? "IN"}
-        onClose={closeMovement}
+        onClose={() => setMovement(null)}
         onDone={handleMovementDone}
       />
 
@@ -189,6 +241,37 @@ export function StockStatus() {
         material={historyMaterial}
         onClose={() => setHistoryMaterial(null)}
       />
+
+      <EditMaterialDialog
+        material={editMaterial}
+        open={!!editMaterial}
+        onClose={() => setEditMaterial(null)}
+        onSaved={handleEditSaved}
+      />
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(v) => { if (!v) setDeleteTarget(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{deleteTarget?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the material and all its stock movement history.
+              The current stock of <strong>{deleteTarget?.current_quantity} {deleteTarget?.unit_of_measure}</strong> will be removed.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? "Deleting..." : "Delete Material"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

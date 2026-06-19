@@ -4,9 +4,12 @@ import {
   Building2,
   FileDown,
   Mail,
+  MoreHorizontal,
   Package,
+  Pencil,
   Phone,
   RotateCcw,
+  Trash2,
   Truck,
   User,
 } from "lucide-react"
@@ -24,6 +27,23 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Empty,
   EmptyDescription,
   EmptyHeader,
@@ -31,6 +51,8 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { AddSupplierDialog } from "@/components/AddSupplierDialog"
+import { EditSupplierDialog } from "@/components/EditSupplierDialog"
+import { EditShipmentDialog, type ShipmentEditRow } from "@/components/EditShipmentDialog"
 import { NewShipmentDialog } from "@/components/NewShipmentDialog"
 import { ReturnPackagingDialog } from "@/components/ReturnPackagingDialog"
 import { supabase } from "@/lib/supabase"
@@ -74,9 +96,11 @@ function formatCurrency(n: number) {
 
 interface ListProps {
   onSelect: (supplier: Supplier) => void
+  onEdit: (supplier: Supplier) => void
+  onDelete: (supplier: Supplier) => void
 }
 
-function SupplierList({ onSelect }: ListProps) {
+function SupplierList({ onSelect, onEdit, onDelete }: ListProps) {
   const [suppliers, setSuppliers] = React.useState<SupplierWithStats[]>([])
   const [loading, setLoading] = React.useState(true)
 
@@ -133,10 +157,10 @@ function SupplierList({ onSelect }: ListProps) {
   return (
     <div className="flex flex-col gap-3">
       {suppliers.map((s) => (
-        <button
+        <div
           key={s.id}
+          className="rounded-xl border bg-card px-5 py-4 hover:bg-accent/50 transition-colors group cursor-pointer"
           onClick={() => onSelect(s)}
-          className="text-left rounded-xl border bg-card px-5 py-4 hover:bg-accent/50 transition-colors w-full group"
         >
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="flex flex-col gap-1">
@@ -182,9 +206,30 @@ function SupplierList({ onSelect }: ListProps) {
                   <div className="text-xs text-muted-foreground">last delivery</div>
                 </div>
               )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                  <Button variant="ghost" size="sm" className="size-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(s) }}>
+                    <Pencil className="size-3.5 mr-2" />
+                    Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={(e) => { e.stopPropagation(); onDelete(s) }}
+                  >
+                    <Trash2 className="size-3.5 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
-        </button>
+        </div>
       ))}
     </div>
   )
@@ -376,6 +421,9 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
   const [loading, setLoading] = React.useState(true)
   const [shipmentDialogOpen, setShipmentDialogOpen] = React.useState(false)
   const [returnDialogOpen, setReturnDialogOpen] = React.useState(false)
+  const [editShipment, setEditShipment] = React.useState<ShipmentEditRow | null>(null)
+  const [deleteShipmentTarget, setDeleteShipmentTarget] = React.useState<ShipmentRow | null>(null)
+  const [deletingShipment, setDeletingShipment] = React.useState(false)
   const [selectedMonth, setSelectedMonth] = React.useState(() => {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
@@ -438,6 +486,42 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
     const nm = m === 12 ? 1 : m + 1
     const ny = m === 12 ? y + 1 : y
     setSelectedMonth(`${ny}-${String(nm).padStart(2, "0")}`)
+  }
+
+  async function handleDeleteShipment() {
+    if (!deleteShipmentTarget) return
+    setDeletingShipment(true)
+
+    // Find and delete the associated stock movement, then revert material qty
+    const { data: movRows } = await supabase
+      .from("stock_movements")
+      .select("id, quantity")
+      .eq("shipment_id", deleteShipmentTarget.id)
+      .limit(1)
+
+    if (movRows && movRows.length > 0) {
+      const mov = movRows[0]
+      // Revert the material quantity
+      const { data: mat } = await supabase
+        .from("raw_materials")
+        .select("current_quantity")
+        .eq("id", deleteShipmentTarget.raw_material_id)
+        .single()
+      if (mat) {
+        await supabase
+          .from("raw_materials")
+          .update({ current_quantity: Math.max(0, mat.current_quantity - mov.quantity) })
+          .eq("id", deleteShipmentTarget.raw_material_id)
+      }
+      await supabase.from("stock_movements").delete().eq("id", mov.id)
+    }
+
+    // Delete the shipment (packaging_transactions SET NULL on shipment_id via FK)
+    await supabase.from("shipments").delete().eq("id", deleteShipmentTarget.id)
+
+    setDeletingShipment(false)
+    setDeleteShipmentTarget(null)
+    await load()
   }
 
   return (
@@ -559,6 +643,7 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
                       <TableHead>Invoice</TableHead>
                       <TableHead>Packaging</TableHead>
                       <TableHead>Note</TableHead>
+                      <TableHead className="w-10" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -607,6 +692,29 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
                           <TableCell className="text-xs text-muted-foreground max-w-[160px] truncate">
                             {s.note ?? "—"}
                           </TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="size-7 p-0">
+                                  <MoreHorizontal className="size-3.5" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => setEditShipment(s as ShipmentEditRow)}>
+                                  <Pencil className="size-3.5 mr-2" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => setDeleteShipmentTarget(s)}
+                                >
+                                  <Trash2 className="size-3.5 mr-2" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
                         </TableRow>
                       )
                     })}
@@ -638,6 +746,38 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
         onClose={() => setReturnDialogOpen(false)}
         onDone={() => { setReturnDialogOpen(false); load() }}
       />
+      <EditShipmentDialog
+        shipment={editShipment}
+        open={!!editShipment}
+        onClose={() => setEditShipment(null)}
+        onSaved={() => { setEditShipment(null); load() }}
+      />
+      <AlertDialog
+        open={!!deleteShipmentTarget}
+        onOpenChange={(v) => { if (!v) setDeleteShipmentTarget(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this shipment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the shipment of{" "}
+              <strong>{deleteShipmentTarget?.quantity} {deleteShipmentTarget?.raw_materials?.unit_of_measure}</strong>{" "}
+              of <strong>{deleteShipmentTarget?.raw_materials?.name}</strong> and reverse the stock movement.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteShipment}
+              disabled={deletingShipment}
+            >
+              {deletingShipment ? "Deleting..." : "Delete Shipment"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -647,10 +787,64 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
 export function Suppliers() {
   const [selected, setSelected] = React.useState<Supplier | null>(null)
   const [listKey, setListKey] = React.useState(0)
+  const [editSupplier, setEditSupplier] = React.useState<Supplier | null>(null)
+  const [deleteSupplierTarget, setDeleteSupplierTarget] = React.useState<Supplier | null>(null)
+  const [deletingSupplier, setDeletingSupplier] = React.useState(false)
+
+  function refreshList() { setListKey((k) => k + 1) }
 
   function handleBack() {
     setSelected(null)
-    setListKey((k) => k + 1)
+    refreshList()
+  }
+
+  async function handleDeleteSupplier() {
+    if (!deleteSupplierTarget) return
+    setDeletingSupplier(true)
+
+    // Revert stock for all shipments from this supplier
+    const { data: shipRows } = await supabase
+      .from("shipments")
+      .select("id, raw_material_id, quantity")
+      .eq("supplier_id", deleteSupplierTarget.id)
+
+    if (shipRows && shipRows.length > 0) {
+      // Group reductions per material
+      const reductions = new Map<string, number>()
+      for (const s of shipRows) {
+        reductions.set(s.raw_material_id, (reductions.get(s.raw_material_id) ?? 0) + s.quantity)
+      }
+      // Find and delete linked stock_movements
+      const shipIds = shipRows.map((s) => s.id)
+      const { data: movRows } = await supabase
+        .from("stock_movements")
+        .select("id, raw_material_id, quantity")
+        .in("shipment_id", shipIds)
+      if (movRows && movRows.length > 0) {
+        await supabase.from("stock_movements").delete().in("id", movRows.map((m) => m.id))
+      }
+      // Adjust material quantities
+      for (const [matId, totalReduction] of reductions) {
+        const { data: mat } = await supabase
+          .from("raw_materials")
+          .select("current_quantity")
+          .eq("id", matId)
+          .single()
+        if (mat) {
+          await supabase
+            .from("raw_materials")
+            .update({ current_quantity: Math.max(0, mat.current_quantity - totalReduction) })
+            .eq("id", matId)
+        }
+      }
+    }
+
+    // Delete supplier (cascades to shipments and packaging_transactions)
+    await supabase.from("suppliers").delete().eq("id", deleteSupplierTarget.id)
+
+    setDeletingSupplier(false)
+    setDeleteSupplierTarget(null)
+    refreshList()
   }
 
   if (selected) {
@@ -671,9 +865,47 @@ export function Suppliers() {
             <span className="text-xs">Click a supplier to view details.</span>
           </p>
         </div>
-        <AddSupplierDialog onCreated={() => setListKey((k) => k + 1)} />
+        <AddSupplierDialog onCreated={refreshList} />
       </div>
-      <SupplierList key={listKey} onSelect={setSelected} />
+      <SupplierList
+        key={listKey}
+        onSelect={setSelected}
+        onEdit={setEditSupplier}
+        onDelete={setDeleteSupplierTarget}
+      />
+
+      <EditSupplierDialog
+        supplier={editSupplier}
+        open={!!editSupplier}
+        onClose={() => setEditSupplier(null)}
+        onSaved={() => { setEditSupplier(null); refreshList() }}
+      />
+
+      <AlertDialog
+        open={!!deleteSupplierTarget}
+        onOpenChange={(v) => { if (!v) setDeleteSupplierTarget(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{deleteSupplierTarget?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the supplier along with all their shipments and
+              packaging records. Stock quantities will be adjusted to remove deliveries from
+              this supplier. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteSupplier}
+              disabled={deletingSupplier}
+            >
+              {deletingSupplier ? "Deleting..." : "Delete Supplier"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

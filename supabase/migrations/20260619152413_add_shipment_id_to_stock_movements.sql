@@ -1,0 +1,1 @@
+ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS shipment_id uuid REFERENCES shipments(id) ON DELETE SET NULL;

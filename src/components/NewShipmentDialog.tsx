@@ -107,6 +107,7 @@ export function NewShipmentDialog({ supplier, open, onClose, onDone }: Props) {
         supplier_name: supplier!.name,
         invoice_number: invoiceNumber.trim() || null,
         note: note.trim() || null,
+        shipment_id: shipmentData.id,
       }),
       supabase
         .from("raw_materials")
