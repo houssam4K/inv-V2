@@ -140,6 +140,7 @@ export function StockStatus() {
                 <TableHead>Material</TableHead>
                 <TableHead>Unit</TableHead>
                 <TableHead className="text-right">Current Stock</TableHead>
+                <TableHead className="text-right">Days Left</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -147,6 +148,9 @@ export function StockStatus() {
               {materials.map((m) => {
                 const unitLabel = UNITS.find((u) => u.value === m.unit_of_measure)?.label ?? m.unit_of_measure
                 const isEmpty = m.current_quantity === 0
+                const daysLeft = m.daily_consumption && m.daily_consumption > 0
+                  ? Math.floor(m.current_quantity / m.daily_consumption)
+                  : null
                 return (
                   <TableRow key={m.id}>
                     <TableCell>
@@ -176,6 +180,22 @@ export function StockStatus() {
                         >
                           Out of stock
                         </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {daysLeft !== null ? (
+                        <span className={`font-medium tabular-nums ${
+                          daysLeft <= 3
+                            ? "text-destructive"
+                            : daysLeft <= 7
+                            ? "text-amber-600 dark:text-amber-400"
+                            : ""
+                        }`}>
+                          {daysLeft}
+                          <span className="text-muted-foreground font-normal ml-1 text-xs">days</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right">

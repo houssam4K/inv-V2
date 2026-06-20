@@ -26,6 +26,7 @@ export interface StockMovement {
   note: string | null
   supplier_name: string | null
   invoice_number: string | null
+  shipment_id: string | null
 }
 
 export interface ProductionLine {

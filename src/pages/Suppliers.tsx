@@ -53,6 +53,7 @@ import {
 import { AddSupplierDialog } from "@/components/AddSupplierDialog"
 import { EditSupplierDialog } from "@/components/EditSupplierDialog"
 import { EditShipmentDialog, type ShipmentEditRow } from "@/components/EditShipmentDialog"
+import { EditPackagingDialog } from "@/components/EditPackagingDialog"
 import { NewShipmentDialog } from "@/components/NewShipmentDialog"
 import { ReturnPackagingDialog } from "@/components/ReturnPackagingDialog"
 import { supabase } from "@/lib/supabase"
@@ -249,10 +250,14 @@ function PackagingBalanceSection({
   transactions,
   filteredTransactions,
   supplierName,
+  onEdit,
+  onDelete,
 }: {
   transactions: PackagingTransaction[]
   filteredTransactions: PackagingTransaction[]
   supplierName: string
+  onEdit: (t: PackagingTransaction) => void
+  onDelete: (t: PackagingTransaction) => void
 }) {
   // Balance always uses all-time data
   const balance: PackagingBalance[] = PACKAGING_TYPES.map((pt) => {
@@ -343,6 +348,7 @@ function PackagingBalanceSection({
                   <TableHead>Type</TableHead>
                   <TableHead>Packaging</TableHead>
                   <TableHead>Note</TableHead>
+                  <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -358,6 +364,10 @@ function PackagingBalanceSection({
                     })
                     .filter(Boolean)
                   const note = group.find((t) => t.note)?.note ?? null
+
+                  // For grouped rows, show actions for single-item groups
+                  const singleItem = group.length === 1 ? group[0] : null
+
                   return (
                     <TableRow key={`${first.date.slice(0, 10)}_${first.transaction_type}`}>
                       <TableCell className="text-sm">{formatDate(first.date)}</TableCell>
@@ -377,6 +387,31 @@ function PackagingBalanceSection({
                         {parts.join(" · ") || "—"}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{note ?? "—"}</TableCell>
+                      <TableCell>
+                        {singleItem && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="size-7 p-0">
+                                <MoreHorizontal className="size-3.5" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => onEdit(singleItem)}>
+                                <Pencil className="size-3.5 mr-2" />
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => onDelete(singleItem)}
+                              >
+                                <Trash2 className="size-3.5 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </TableCell>
                     </TableRow>
                   )
                 })}
@@ -424,6 +459,9 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
   const [editShipment, setEditShipment] = React.useState<ShipmentEditRow | null>(null)
   const [deleteShipmentTarget, setDeleteShipmentTarget] = React.useState<ShipmentRow | null>(null)
   const [deletingShipment, setDeletingShipment] = React.useState(false)
+  const [editPackaging, setEditPackaging] = React.useState<PackagingTransaction | null>(null)
+  const [deletePackagingTarget, setDeletePackagingTarget] = React.useState<PackagingTransaction | null>(null)
+  const [deletingPackaging, setDeletingPackaging] = React.useState(false)
   const [selectedMonth, setSelectedMonth] = React.useState(() => {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
@@ -521,6 +559,17 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
 
     setDeletingShipment(false)
     setDeleteShipmentTarget(null)
+    await load()
+  }
+
+  async function handleDeletePackaging() {
+    if (!deletePackagingTarget) return
+    setDeletingPackaging(true)
+
+    await supabase.from("packaging_transactions").delete().eq("id", deletePackagingTarget.id)
+
+    setDeletingPackaging(false)
+    setDeletePackagingTarget(null)
     await load()
   }
 
@@ -729,6 +778,8 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
               transactions={packaging}
               filteredTransactions={filteredPackaging}
               supplierName={supplier.name}
+              onEdit={setEditPackaging}
+              onDelete={setDeletePackagingTarget}
             />
           </TabsContent>
         </Tabs>
@@ -774,6 +825,39 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
               disabled={deletingShipment}
             >
               {deletingShipment ? "Deleting..." : "Delete Shipment"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <EditPackagingDialog
+        transaction={editPackaging}
+        open={!!editPackaging}
+        onClose={() => setEditPackaging(null)}
+        onSaved={() => { setEditPackaging(null); load() }}
+      />
+
+      <AlertDialog
+        open={!!deletePackagingTarget}
+        onOpenChange={(v) => { if (!v) setDeletePackagingTarget(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this packaging record?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the packaging record of{" "}
+              <strong>{deletePackagingTarget?.quantity} {deletePackagingTarget?.packaging_type}</strong>.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeletePackaging}
+              disabled={deletingPackaging}
+            >
+              {deletingPackaging ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

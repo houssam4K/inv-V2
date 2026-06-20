@@ -7,7 +7,10 @@ import {
   Clock,
   Edit2,
   FileText,
+  MoreHorizontal,
   Package,
+  Pencil,
+  Trash2,
   TrendingDown,
   Truck,
 } from "lucide-react"
@@ -25,11 +28,29 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart"
 import { Bar, BarChart, CartesianGrid, LabelList, XAxis, YAxis } from "recharts"
+import { EditStockMovementDialog } from "@/components/EditStockMovementDialog"
 import { supabase } from "@/lib/supabase"
 import { type RawMaterial, type StockMovement } from "@/lib/types"
 
@@ -45,10 +66,6 @@ function fmtDate(iso: string) {
     month: "short",
     day: "numeric",
   })
-}
-
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("fr-DZ", { hour: "2-digit", minute: "2-digit" })
 }
 
 function monthKey(iso: string) {
@@ -184,6 +201,9 @@ export function MaterialDetail({ material: initialMaterial, onBack, onUpdated }:
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
   })
+  const [editMovement, setEditMovement] = React.useState<MovementWithBalance | null>(null)
+  const [deleteMovementTarget, setDeleteMovementTarget] = React.useState<MovementWithBalance | null>(null)
+  const [deletingMovement, setDeletingMovement] = React.useState(false)
 
   React.useEffect(() => {
     setMaterial(initialMaterial)
@@ -228,21 +248,32 @@ export function MaterialDetail({ material: initialMaterial, onBack, onUpdated }:
     }
   }, [availableMonths])
 
-  // Movements in current month
-  const monthMovements = React.useMemo(
-    () => allMovements.filter((m) => monthKey(m.date) === currentMonth),
-    [allMovements, currentMonth]
-  )
+  // Movements in current month - sorted newest first (reverse chronologically by date)
+  // Within same day, keep chronological order (ascending by date/time)
+  const monthMovements = React.useMemo(() => {
+    const filtered = allMovements.filter((m) => monthKey(m.date) === currentMonth)
+    // Sort by date descending (newest first)
+    // Within same date, keep original order (which is chronological)
+    return [...filtered].sort((a, b) => {
+      const dateCompare = b.date.localeCompare(a.date)
+      if (dateCompare !== 0) return dateCompare
+      // Same date - maintain original order (chronological)
+      return 0
+    })
+  }, [allMovements, currentMonth])
 
   // Stock at start of selected month (balance before first movement of month)
   const stockAtStartOfMonth = React.useMemo(() => {
-    const idx = allMovements.findIndex((m) => monthKey(m.date) === currentMonth)
-    if (idx === 0) return 0
-    if (idx === -1) return allMovements[allMovements.length - 1]?.balanceAfter ?? 0
-    return allMovements[idx - 1].balanceAfter
+    // Find movements in chronological order to get start balance
+    const chronMovements = allMovements.filter((m) => monthKey(m.date) === currentMonth)
+    if (chronMovements.length === 0) return allMovements[allMovements.length - 1]?.balanceAfter ?? 0
+
+    // Find the first movement of this month in chronological order
+    const firstOfMonth = chronMovements[0]
+    return firstOfMonth.balanceAfter - (firstOfMonth.movement_type === "IN" ? firstOfMonth.quantity : -firstOfMonth.quantity)
   }, [allMovements, currentMonth])
 
-  // Group movements by day for the table display
+  // Group movements by day for the table display (newest day first)
   const byDay = React.useMemo(() => {
     const map = new Map<string, MovementWithBalance[]>()
     for (const m of monthMovements) {
@@ -253,9 +284,44 @@ export function MaterialDetail({ material: initialMaterial, onBack, onUpdated }:
     return Array.from(map.entries())
   }, [monthMovements])
 
-  // Month stats
-  const totalIn = monthMovements.filter((m) => m.movement_type === "IN").reduce((a, m) => a + m.quantity, 0)
-  const totalOut = monthMovements.filter((m) => m.movement_type === "OUT").reduce((a, m) => a + m.quantity, 0)
+  // Month stats (use original order for correct totals)
+  const monthMovementsChronological = allMovements.filter((m) => monthKey(m.date) === currentMonth)
+  const totalIn = monthMovementsChronological.filter((m) => m.movement_type === "IN").reduce((a, m) => a + m.quantity, 0)
+  const totalOut = monthMovementsChronological.filter((m) => m.movement_type === "OUT").reduce((a, m) => a + m.quantity, 0)
+
+  async function handleDeleteMovement() {
+    if (!deleteMovementTarget) return
+    setDeletingMovement(true)
+
+    const oldDelta = deleteMovementTarget.movement_type === "IN"
+      ? deleteMovementTarget.quantity
+      : -deleteMovementTarget.quantity
+
+    // Delete the movement
+    const { error: delErr } = await supabase
+      .from("stock_movements")
+      .delete()
+      .eq("id", deleteMovementTarget.id)
+
+    if (delErr) {
+      setDeletingMovement(false)
+      return
+    }
+
+    // Adjust material quantity
+    await supabase
+      .from("raw_materials")
+      .update({ current_quantity: Math.max(0, material.current_quantity - oldDelta) })
+      .eq("id", material.id)
+
+    // Also update local material state
+    setMaterial(m => ({ ...m, current_quantity: Math.max(0, m.current_quantity - oldDelta) }))
+    onUpdated({ ...material, current_quantity: Math.max(0, material.current_quantity - oldDelta) })
+
+    setDeletingMovement(false)
+    setDeleteMovementTarget(null)
+    await loadMovements()
+  }
 
   // Jours restants
   const joursRestants = material.daily_consumption && material.daily_consumption > 0
@@ -392,11 +458,12 @@ export function MaterialDetail({ material: initialMaterial, onBack, onUpdated }:
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date & Time</TableHead>
+                    <TableHead>Date</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead className="text-right">Qty</TableHead>
                     <TableHead className="text-right">Stock After</TableHead>
                     <TableHead>Source / Note</TableHead>
+                    <TableHead className="w-10" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -405,7 +472,7 @@ export function MaterialDetail({ material: initialMaterial, onBack, onUpdated }:
                     <React.Fragment key={day}>
                       {/* Day separator row */}
                       <TableRow className="bg-muted/30 hover:bg-muted/30">
-                        <TableCell colSpan={5} className="py-1.5">
+                        <TableCell colSpan={6} className="py-1.5">
                           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                             {day}
                           </span>
@@ -416,7 +483,7 @@ export function MaterialDetail({ material: initialMaterial, onBack, onUpdated }:
                         return (
                           <TableRow key={mov.id}>
                             <TableCell className="text-sm text-muted-foreground">
-                              {fmtTime(mov.date)}
+                              {/* Just date, no time */}
                             </TableCell>
                             <TableCell>
                               <span className={`inline-flex items-center gap-1 text-xs font-medium ${isIn ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>
@@ -457,22 +524,32 @@ export function MaterialDetail({ material: initialMaterial, onBack, onUpdated }:
                                 )}
                               </div>
                             </TableCell>
+                            <TableCell>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="size-7 p-0">
+                                    <MoreHorizontal className="size-3.5" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => setEditMovement(mov)}>
+                                    <Pencil className="size-3.5 mr-2" />
+                                    Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => setDeleteMovementTarget(mov)}
+                                  >
+                                    <Trash2 className="size-3.5 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
                           </TableRow>
                         )
                       })}
-                      {/* End of day stock */}
-                      <TableRow className="bg-muted/10 hover:bg-muted/10">
-                        <TableCell colSpan={3} className="py-1">
-                          <span className="text-xs text-muted-foreground pl-2">End of day</span>
-                        </TableCell>
-                        <TableCell className="text-right py-1">
-                          <span className="text-xs font-semibold tabular-nums">
-                            {items[items.length - 1].balanceAfter}
-                            <span className="font-normal text-muted-foreground ml-1">{material.unit_of_measure}</span>
-                          </span>
-                        </TableCell>
-                        <TableCell className="py-1" />
-                      </TableRow>
                     </React.Fragment>
                   ))}
                 </TableBody>
@@ -481,6 +558,42 @@ export function MaterialDetail({ material: initialMaterial, onBack, onUpdated }:
           )}
         </>
       )}
+
+      {/* Edit movement dialog */}
+      <EditStockMovementDialog
+        movement={editMovement ? { ...editMovement, materialUnit: material.unit_of_measure } : null}
+        open={!!editMovement}
+        onClose={() => setEditMovement(null)}
+        onSaved={() => { setEditMovement(null); loadMovements() }}
+      />
+
+      {/* Delete movement confirmation */}
+      <AlertDialog
+        open={!!deleteMovementTarget}
+        onOpenChange={(v) => { if (!v) setDeleteMovementTarget(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this movement?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the{" "}
+              <strong>{deleteMovementTarget?.movement_type === "IN" ? "Received" : "Consumed"} {deleteMovementTarget?.quantity} {material.unit_of_measure}</strong>{" "}
+              movement from {deleteMovementTarget ? fmtDate(deleteMovementTarget.date) : ""}.
+              Stock quantity will be adjusted accordingly. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteMovement}
+              disabled={deletingMovement}
+            >
+              {deletingMovement ? "Deleting..." : "Delete Movement"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
