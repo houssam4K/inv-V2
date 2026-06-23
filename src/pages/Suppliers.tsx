@@ -531,7 +531,14 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
       await supabase.from("stock_movements").delete().eq("id", mov.id)
     }
 
-    // Delete the shipment (packaging_transactions SET NULL on shipment_id via FK)
+    // Explicitly delete any packaging transactions tied to this shipment
+    // to prevent them from becoming orphaned in the database.
+    await supabase
+      .from("packaging_transactions")
+      .delete()
+      .eq("shipment_id", deleteShipmentTarget.id)
+
+    // Delete the shipment itself
     await supabase.from("shipments").delete().eq("id", deleteShipmentTarget.id)
 
     setDeletingShipment(false)
