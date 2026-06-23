@@ -390,14 +390,14 @@ export function Production() {
                   >
                     <span className="text-xs text-muted-foreground">{row.team_name}</span>
                     <span className="text-lg font-semibold tabular-nums">
-                      {row.total.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">bottles</span>
+                      {row.total.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">pallets</span>
                     </span>
                   </div>
                 ))}
                 <div className="rounded-lg border bg-primary/5 p-3 flex flex-col gap-1">
                   <span className="text-xs text-muted-foreground">Grand Total</span>
                   <span className="text-lg font-semibold tabular-nums">
-                    {grandTotal.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">bottles</span>
+                    {grandTotal.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">pallets</span>
                   </span>
                 </div>
               </div>
@@ -449,7 +449,7 @@ export function Production() {
                     }
                     className="flex-1"
                   />
-                  <span className="text-xs text-muted-foreground shrink-0">bottles</span>
+                  <span className="text-xs text-muted-foreground shrink-0">pallets</span>
                 </div>
               ))}
             </div>

@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Building2, ClipboardList, Factory, LayoutDashboard, Package, TrendingUp } from "lucide-react"
+import { Building2, BarChart3, ClipboardList, Factory, LayoutDashboard, Package, TrendingUp, MessageSquare } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -22,8 +22,10 @@ import { Production } from "@/pages/Production"
 import { Suppliers } from "@/pages/Suppliers"
 import { Finance } from "@/pages/Finance"
 import { PhysicalInventory } from "@/pages/PhysicalInventory"
+import { Analytics } from "@/pages/Analytics"
+import { TeamBoard } from "@/pages/TeamBoard"
 
-type Page = "dashboard" | "stock-status" | "production" | "suppliers" | "finance" | "physical-inventory"
+type Page = "dashboard" | "stock-status" | "production" | "suppliers" | "finance" | "physical-inventory" | "analytics" | "team-board"
 
 const NAV_ITEMS: { id: Page; label: string; icon: React.ElementType }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -32,6 +34,8 @@ const NAV_ITEMS: { id: Page; label: string; icon: React.ElementType }[] = [
   { id: "suppliers", label: "Suppliers", icon: Building2 },
   { id: "finance", label: "Finance", icon: TrendingUp },
   { id: "physical-inventory", label: "Physical Inventory", icon: ClipboardList },
+  { id: "analytics", label: "Analytics", icon: BarChart3 },
+  { id: "team-board", label: "Team Board", icon: MessageSquare },
 ]
 
 export function App() {
@@ -85,13 +89,15 @@ export function App() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto bg-muted/20">
           {page === "dashboard" && <Dashboard />}
           {page === "stock-status" && <StockStatus />}
           {page === "production" && <Production />}
           {page === "suppliers" && <Suppliers />}
           {page === "finance" && <Finance />}
           {page === "physical-inventory" && <PhysicalInventory />}
+          {page === "analytics" && <Analytics />}
+          {page === "team-board" && <TeamBoard />}
         </main>
       </SidebarInset>
     </SidebarProvider>

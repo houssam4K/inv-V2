@@ -222,13 +222,25 @@ export function MaterialDetail({ material: initialMaterial, onBack, onUpdated }:
     // Compute running balance forward from 0
     let balance = 0
     const withBalance: MovementWithBalance[] = movements.map((m) => {
-      if (m.movement_type === "IN") balance += m.quantity
-      else balance -= m.quantity
+      if (m.movement_type === "IN") balance += Number(m.quantity)
+      else balance -= Number(m.quantity)
       return { ...m, balanceAfter: balance }
     })
 
     setAllMovements(withBalance)
     setLoading(false)
+  }
+
+  async function reloadMaterial() {
+    const { data } = await supabase
+      .from("raw_materials")
+      .select("*")
+      .eq("id", material.id)
+      .single()
+    if (data) {
+      setMaterial(data as RawMaterial)
+      onUpdated(data as RawMaterial)
+    }
   }
 
   React.useEffect(() => { loadMovements() }, [material.id])
@@ -308,19 +320,25 @@ export function MaterialDetail({ material: initialMaterial, onBack, onUpdated }:
       return
     }
 
-    // Adjust material quantity
-    await supabase
+    // Adjust material quantity by reversing the deleted movement's delta
+    const { data: mat } = await supabase
       .from("raw_materials")
-      .update({ current_quantity: Math.max(0, material.current_quantity - oldDelta) })
+      .select("current_quantity")
       .eq("id", material.id)
+      .single()
 
-    // Also update local material state
-    setMaterial(m => ({ ...m, current_quantity: Math.max(0, m.current_quantity - oldDelta) }))
-    onUpdated({ ...material, current_quantity: Math.max(0, material.current_quantity - oldDelta) })
+    if (mat) {
+      const newQty = Math.max(0, mat.current_quantity - oldDelta)
+      await supabase
+        .from("raw_materials")
+        .update({ current_quantity: newQty })
+        .eq("id", material.id)
+    }
 
     setDeletingMovement(false)
     setDeleteMovementTarget(null)
     await loadMovements()
+    await reloadMaterial()
   }
 
   // Jours restants
@@ -483,7 +501,7 @@ export function MaterialDetail({ material: initialMaterial, onBack, onUpdated }:
                         return (
                           <TableRow key={mov.id}>
                             <TableCell className="text-sm text-muted-foreground">
-                              {/* Just date, no time */}
+                              {fmtDate(mov.date)}
                             </TableCell>
                             <TableCell>
                               <span className={`inline-flex items-center gap-1 text-xs font-medium ${isIn ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>
@@ -564,7 +582,7 @@ export function MaterialDetail({ material: initialMaterial, onBack, onUpdated }:
         movement={editMovement ? { ...editMovement, materialUnit: material.unit_of_measure } : null}
         open={!!editMovement}
         onClose={() => setEditMovement(null)}
-        onSaved={() => { setEditMovement(null); loadMovements() }}
+        onSaved={async () => { setEditMovement(null); await loadMovements(); await reloadMaterial() }}
       />
 
       {/* Delete movement confirmation */}

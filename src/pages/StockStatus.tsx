@@ -46,6 +46,7 @@ export function StockStatus() {
   const [editMaterial, setEditMaterial] = React.useState<RawMaterial | null>(null)
   const [deleteTarget, setDeleteTarget] = React.useState<RawMaterial | null>(null)
   const [deleting, setDeleting] = React.useState(false)
+  const [deleteError, setDeleteError] = React.useState<string | null>(null)
 
   async function load() {
     const { data } = await supabase
@@ -81,9 +82,14 @@ export function StockStatus() {
   async function handleDelete() {
     if (!deleteTarget) return
     setDeleting(true)
-    // stock_movements cascade-delete automatically (ON DELETE CASCADE)
-    await supabase.from("raw_materials").delete().eq("id", deleteTarget.id)
+    setDeleteError(null)
+    // stock_movements, shipments, inventory_entries all cascade-delete automatically
+    const { error } = await supabase.from("raw_materials").delete().eq("id", deleteTarget.id)
     setDeleting(false)
+    if (error) {
+      setDeleteError(error.message)
+      return
+    }
     setDeleteTarget(null)
     if (detailMaterial?.id === deleteTarget.id) setDetailMaterial(null)
     await load()
@@ -270,7 +276,7 @@ export function StockStatus() {
       />
 
       {/* Delete confirmation */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={(v) => { if (!v) setDeleteTarget(null) }}>
+      <AlertDialog open={!!deleteTarget} onOpenChange={(v) => { if (!v) { setDeleteTarget(null); setDeleteError(null) } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete "{deleteTarget?.name}"?</AlertDialogTitle>
@@ -279,6 +285,9 @@ export function StockStatus() {
               The current stock of <strong>{deleteTarget?.current_quantity} {deleteTarget?.unit_of_measure}</strong> will be removed.
               This action cannot be undone.
             </AlertDialogDescription>
+            {deleteError && (
+              <p className="text-sm text-destructive mt-2 font-medium">{deleteError}</p>
+            )}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>

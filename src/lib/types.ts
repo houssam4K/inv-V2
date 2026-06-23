@@ -114,3 +114,20 @@ export interface InventoryEntry {
   real_quantity: number
   created_at: string
 }
+
+export interface Note {
+  id: string
+  content: string
+  author: string | null
+  color: string
+  created_at: string
+}
+
+export interface ExpectedShipment {
+  id: string
+  supplier_name: string
+  description: string
+  expected_date: string
+  status: "pending" | "arrived"
+  created_at: string
+}
