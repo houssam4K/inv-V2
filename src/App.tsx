@@ -50,7 +50,7 @@ export function App() {
               <Package className="size-4" />
             </div>
             <span className="font-semibold text-sm truncate group-data-[collapsible=icon]:hidden">
-              RawTrack
+              SARL Ifren
             </span>
           </div>
         </SidebarHeader>

@@ -30,6 +30,7 @@ export function StockMovementDialog({ material, type, onClose, onDone }: Props) 
   const [invoiceNumber, setInvoiceNumber] = React.useState("")
   const [error, setError] = React.useState("")
   const [loading, setLoading] = React.useState(false)
+  const [date, setDate] = React.useState("")
 
   React.useEffect(() => {
     if (!material) {
@@ -38,6 +39,11 @@ export function StockMovementDialog({ material, type, onClose, onDone }: Props) 
       setSupplierName("")
       setInvoiceNumber("")
       setError("")
+      setDate("")
+    } else {
+      const now = new Date()
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
+      setDate(now.toISOString().slice(0, 10))
     }
   }, [material])
 
@@ -74,6 +80,7 @@ export function StockMovementDialog({ material, type, onClose, onDone }: Props) 
         raw_material_id: material!.id,
         movement_type: type,
         quantity: qty,
+        date: date ? new Date(date).toISOString() : undefined,
         note: note.trim() || null,
         supplier_name: isIn && supplierName.trim() ? supplierName.trim() : null,
         invoice_number: isIn && invoiceNumber.trim() ? invoiceNumber.trim() : null,
@@ -129,6 +136,16 @@ export function StockMovementDialog({ material, type, onClose, onDone }: Props) 
               onChange={(e) => setQuantity(e.target.value)}
               aria-invalid={!!error}
               autoFocus
+            />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="mov-date">Date</Label>
+            <Input
+              id="mov-date"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
             />
           </div>
 

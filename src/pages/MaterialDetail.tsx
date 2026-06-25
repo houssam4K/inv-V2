@@ -207,10 +207,12 @@ export function MaterialDetail({ material: initialMaterial, onBack, onUpdated }:
 
   React.useEffect(() => {
     setMaterial(initialMaterial)
-  }, [initialMaterial.id])
+  }, [initialMaterial])
 
-  async function loadMovements() {
+  async function loadMovements(freshQty?: number) {
     setLoading(true)
+    const currentQty = freshQty !== undefined ? freshQty : Number(material.current_quantity)
+
     const { data } = await supabase
       .from("stock_movements")
       .select("*")
@@ -219,8 +221,11 @@ export function MaterialDetail({ material: initialMaterial, onBack, onUpdated }:
 
     const movements = (data as StockMovement[]) ?? []
 
-    // Compute running balance forward from 0
-    let balance = 0
+    const totalDelta = movements.reduce((acc, m) => acc + (m.movement_type === "IN" ? Number(m.quantity) : -Number(m.quantity)), 0)
+    const baseStock = currentQty - totalDelta
+
+    // Compute running balance forward from baseStock
+    let balance = baseStock
     const withBalance: MovementWithBalance[] = movements.map((m) => {
       if (m.movement_type === "IN") balance += Number(m.quantity)
       else balance -= Number(m.quantity)
@@ -254,9 +259,14 @@ export function MaterialDetail({ material: initialMaterial, onBack, onUpdated }:
   }, [allMovements])
 
   // Ensure currentMonth is valid
+  const hasInitialized = React.useRef(false)
+
   React.useEffect(() => {
-    if (availableMonths.length > 0 && !availableMonths.includes(currentMonth)) {
-      setCurrentMonth(availableMonths[0])
+    if (availableMonths.length > 0 && !hasInitialized.current) {
+      if (!availableMonths.includes(currentMonth)) {
+        setCurrentMonth(availableMonths[0])
+      }
+      hasInitialized.current = true
     }
   }, [availableMonths])
 
@@ -276,14 +286,24 @@ export function MaterialDetail({ material: initialMaterial, onBack, onUpdated }:
 
   // Stock at start of selected month (balance before first movement of month)
   const stockAtStartOfMonth = React.useMemo(() => {
-    // Find movements in chronological order to get start balance
     const chronMovements = allMovements.filter((m) => monthKey(m.date) === currentMonth)
-    if (chronMovements.length === 0) return allMovements[allMovements.length - 1]?.balanceAfter ?? 0
+    
+    if (chronMovements.length > 0) {
+      const firstOfMonth = chronMovements[0]
+      return firstOfMonth.balanceAfter - (firstOfMonth.movement_type === "IN" ? Number(firstOfMonth.quantity) : -Number(firstOfMonth.quantity))
+    }
 
-    // Find the first movement of this month in chronological order
-    const firstOfMonth = chronMovements[0]
-    return firstOfMonth.balanceAfter - (firstOfMonth.movement_type === "IN" ? firstOfMonth.quantity : -firstOfMonth.quantity)
-  }, [allMovements, currentMonth])
+    // If no movements this month, find the last movement BEFORE this month
+    const priorMovements = allMovements.filter((m) => monthKey(m.date) < currentMonth)
+    if (priorMovements.length > 0) {
+      return priorMovements[priorMovements.length - 1].balanceAfter
+    }
+
+    // No prior movements.
+    // Calculate total delta from all movements to find baseStock
+    const totalDelta = allMovements.reduce((acc, m) => acc + (m.movement_type === "IN" ? Number(m.quantity) : -Number(m.quantity)), 0)
+    return Number(material.current_quantity) - totalDelta
+  }, [allMovements, currentMonth, material.current_quantity])
 
   // Group movements by day for the table display (newest day first)
   const byDay = React.useMemo(() => {
@@ -298,16 +318,17 @@ export function MaterialDetail({ material: initialMaterial, onBack, onUpdated }:
 
   // Month stats (use original order for correct totals)
   const monthMovementsChronological = allMovements.filter((m) => monthKey(m.date) === currentMonth)
-  const totalIn = monthMovementsChronological.filter((m) => m.movement_type === "IN").reduce((a, m) => a + m.quantity, 0)
-  const totalOut = monthMovementsChronological.filter((m) => m.movement_type === "OUT").reduce((a, m) => a + m.quantity, 0)
+  const totalIn = monthMovementsChronological.filter((m) => m.movement_type === "IN").reduce((a, m) => a + Number(m.quantity), 0)
+  const totalOut = monthMovementsChronological.filter((m) => m.movement_type === "OUT").reduce((a, m) => a + Number(m.quantity), 0)
 
   async function handleDeleteMovement() {
     if (!deleteMovementTarget) return
     setDeletingMovement(true)
 
+    const qty = Number(deleteMovementTarget.quantity)
     const oldDelta = deleteMovementTarget.movement_type === "IN"
-      ? deleteMovementTarget.quantity
-      : -deleteMovementTarget.quantity
+      ? qty
+      : -qty
 
     // Delete the movement
     const { error: delErr } = await supabase
@@ -328,17 +349,20 @@ export function MaterialDetail({ material: initialMaterial, onBack, onUpdated }:
       .single()
 
     if (mat) {
-      const newQty = Math.max(0, mat.current_quantity - oldDelta)
+      const newQty = Math.max(0, Number(mat.current_quantity) - oldDelta)
       await supabase
         .from("raw_materials")
         .update({ current_quantity: newQty })
         .eq("id", material.id)
+      await loadMovements(newQty)
+      await reloadMaterial()
+    } else {
+      await loadMovements()
+      await reloadMaterial()
     }
 
     setDeletingMovement(false)
     setDeleteMovementTarget(null)
-    await loadMovements()
-    await reloadMaterial()
   }
 
   // Jours restants
@@ -582,7 +606,7 @@ export function MaterialDetail({ material: initialMaterial, onBack, onUpdated }:
         movement={editMovement ? { ...editMovement, materialUnit: material.unit_of_measure } : null}
         open={!!editMovement}
         onClose={() => setEditMovement(null)}
-        onSaved={async () => { setEditMovement(null); await loadMovements(); await reloadMaterial() }}
+        onSaved={async (newQty?: number) => { setEditMovement(null); await loadMovements(newQty); await reloadMaterial() }}
       />
 
       {/* Delete movement confirmation */}
