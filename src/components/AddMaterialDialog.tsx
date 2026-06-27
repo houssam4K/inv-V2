@@ -1,6 +1,6 @@
-import * as React from "react"
-import { PackagePlus } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import * as React from "react";
+import { PackagePlus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -9,66 +9,67 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { supabase } from "@/lib/supabase"
-import { UNITS, type UnitOfMeasure } from "@/lib/types"
+} from "@/components/ui/select";
+import { supabase } from "@/lib/supabase";
+import { UNITS, type UnitOfMeasure } from "@/lib/types";
 
 interface Props {
-  onCreated: () => void
+  onCreated: () => void;
 }
 
 export function AddMaterialDialog({ onCreated }: Props) {
-  const [open, setOpen] = React.useState(false)
-  const [name, setName] = React.useState("")
-  const [unit, setUnit] = React.useState<UnitOfMeasure | "">("")
-  const [openingStock, setOpeningStock] = React.useState("")
-  const [dailyConsumption, setDailyConsumption] = React.useState("")
-  const [error, setError] = React.useState("")
-  const [loading, setLoading] = React.useState(false)
+  const [open, setOpen] = React.useState(false);
+  const [name, setName] = React.useState("");
+  const [unit, setUnit] = React.useState<UnitOfMeasure | "">("");
+  const [openingStock, setOpeningStock] = React.useState("");
+  const [dailyConsumption, setDailyConsumption] = React.useState("");
+  const [error, setError] = React.useState("");
+  const [loading, setLoading] = React.useState(false);
 
   function reset() {
-    setName("")
-    setUnit("")
-    setOpeningStock("")
-    setDailyConsumption("")
-    setError("")
+    setName("");
+    setUnit("");
+    setOpeningStock("");
+    setDailyConsumption("");
+    setError("");
   }
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError("")
+    e.preventDefault();
+    setError("");
 
     if (!name.trim()) {
-      setError("Name is required.")
-      return
+      setError("Name is required.");
+      return;
     }
     if (!unit) {
-      setError("Unit of measure is required.")
-      return
+      setError("Unit of measure is required.");
+      return;
     }
 
-    const os = openingStock.trim() !== "" ? parseFloat(openingStock) : 0
+    const os = openingStock.trim() !== "" ? parseFloat(openingStock) : 0;
     if (isNaN(os) || os < 0) {
-      setError("Opening stock must be 0 or more.")
-      return
+      setError("Opening stock must be 0 or more.");
+      return;
     }
 
-    const dc = dailyConsumption.trim() !== "" ? parseFloat(dailyConsumption) : null
+    const dc =
+      dailyConsumption.trim() !== "" ? parseFloat(dailyConsumption) : null;
     if (dc !== null && (isNaN(dc) || dc < 0)) {
-      setError("Daily consumption must be a positive number.")
-      return
+      setError("Daily consumption must be a positive number.");
+      return;
     }
 
-    setLoading(true)
+    setLoading(true);
 
     const { data: matData, error: dbError } = await supabase
       .from("raw_materials")
@@ -79,41 +80,32 @@ export function AddMaterialDialog({ onCreated }: Props) {
         daily_consumption: dc,
       })
       .select("id")
-      .single()
+      .single();
 
     if (dbError) {
-      setLoading(false)
+      setLoading(false);
       if (dbError.code === "23505") {
-        setError("A material with this name already exists.")
+        setError("A material with this name already exists.");
       } else {
-        setError(dbError.message)
+        setError(dbError.message);
       }
-      return
+      return;
     }
 
     // Record opening stock as an initial stock movement
-    if (os > 0 && matData) {
-      await supabase.from("stock_movements").insert({
-        raw_material_id: matData.id,
-        movement_type: "IN",
-        quantity: os,
-        date: new Date().toISOString(),
-        note: "Opening stock",
-      })
-    }
 
-    setLoading(false)
-    reset()
-    setOpen(false)
-    onCreated()
+    setLoading(false);
+    reset();
+    setOpen(false);
+    onCreated();
   }
 
   return (
     <Dialog
       open={open}
       onOpenChange={(v) => {
-        if (!v) reset()
-        setOpen(v)
+        if (!v) reset();
+        setOpen(v);
       }}
     >
       <DialogTrigger asChild>
@@ -165,7 +157,9 @@ export function AddMaterialDialog({ onCreated }: Props) {
           <div className="flex flex-col gap-2">
             <Label htmlFor="mat-os">
               Stock initial{" "}
-              <span className="text-muted-foreground font-normal">(optional, default 0)</span>
+              <span className="text-muted-foreground font-normal">
+                (optional, default 0)
+              </span>
             </Label>
             <Input
               id="mat-os"
@@ -183,7 +177,9 @@ export function AddMaterialDialog({ onCreated }: Props) {
           <div className="flex flex-col gap-2">
             <Label htmlFor="mat-dc">
               Consommation par jour{" "}
-              <span className="text-muted-foreground font-normal">(optional)</span>
+              <span className="text-muted-foreground font-normal">
+                (optional)
+              </span>
             </Label>
             <Input
               id="mat-dc"
@@ -198,16 +194,14 @@ export function AddMaterialDialog({ onCreated }: Props) {
               Used to calculate days remaining and forecast stock.
             </p>
           </div>
-          {error && (
-            <p className="text-sm text-destructive">{error}</p>
-          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
               onClick={() => {
-                reset()
-                setOpen(false)
+                reset();
+                setOpen(false);
               }}
             >
               Cancel
@@ -219,5 +213,5 @@ export function AddMaterialDialog({ onCreated }: Props) {
         </form>
       </DialogContent>
     </Dialog>
-  )
+  );
 }
