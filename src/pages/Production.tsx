@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { BOMConfig } from "@/components/BOMConfig"
 import {
   Table,
   TableBody,
@@ -268,6 +269,7 @@ export function Production() {
 
   return (
     <div className="flex flex-col gap-6 p-6 max-w-6xl mx-auto w-full">
+      {/* ── Page header ────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">Production</h1>
@@ -275,198 +277,217 @@ export function Production() {
             Track daily production by team for each product.
           </p>
         </div>
-        <Button onClick={openEntryDialog} className="gap-1.5">
-          <Factory className="size-4" />
-          Enter Production
-        </Button>
       </div>
 
-      <Tabs value={activeProduct ?? undefined} onValueChange={setActiveProduct}>
+      {/* ── Outer tabs: Production | BOM ─────────────────────────────────── */}
+      <Tabs defaultValue="production">
         <TabsList>
-          {products.map((p) => (
-            <TabsTrigger key={p.id} value={p.id}>
-              {p.name}
-            </TabsTrigger>
-          ))}
+          <TabsTrigger value="production">Production</TabsTrigger>
+          <TabsTrigger value="bom">BOM</TabsTrigger>
         </TabsList>
 
-        {products.map((product) => {
-          const { days, rows, dailyTotals, grandTotal } = buildMonthGrid(product.id)
-          return (
-            <TabsContent key={product.id} value={product.id} className="mt-4">
-              <div className="flex items-center justify-between gap-4 mb-4">
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={prevMonth}>
-                    &larr;
-                  </Button>
-                  <span className="text-sm font-medium min-w-[160px] text-center">
-                    {formatMonthLabel(currentMonth)}
-                  </span>
-                  <Button variant="outline" size="sm" onClick={nextMonth}>
-                    &rarr;
-                  </Button>
-                </div>
-                <span className="text-sm text-muted-foreground">
-                  Line: {product.production_lines.name}
-                </span>
-              </div>
+        {/* ── Production tab ─────────────────────────────────────────────── */}
+        <TabsContent value="production" className="mt-4">
+          <div className="flex items-end justify-end mb-4">
+            <Button onClick={openEntryDialog} className="gap-1.5">
+              <Factory className="size-4" />
+              Enter Production
+            </Button>
+          </div>
 
-              <div className="rounded-xl border bg-card overflow-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="sticky left-0 bg-card z-10 min-w-[80px]">Team</TableHead>
-                      {days.map((day) => {
-                        const d = new Date(day + "T12:00:00")
-                        const wd = isWorkday(day)
-                        return (
-                          <TableHead
-                            key={day}
-                            className={`text-center min-w-[40px] px-1.5 text-xs ${
-                              !wd ? "text-muted-foreground/50" : ""
-                            }`}
-                          >
-                            <div>{d.getDate()}</div>
-                          </TableHead>
-                        )
-                      })}
-                      <TableHead className="text-right font-semibold bg-muted/50">Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rows.map((row) => (
-                      <TableRow key={row.team_id}>
-                        <TableCell className="sticky left-0 bg-card z-10 font-medium text-sm">
-                          {row.team_name}
-                        </TableCell>
-                        {days.map((day) => {
-                          const val = row.entries.get(day)
-                          const wd = isWorkday(day)
-                          return (
+          <Tabs value={activeProduct ?? undefined} onValueChange={setActiveProduct}>
+            <TabsList>
+              {products.map((p) => (
+                <TabsTrigger key={p.id} value={p.id}>
+                  {p.name}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+
+            {products.map((product) => {
+              const { days, rows, dailyTotals, grandTotal } = buildMonthGrid(product.id)
+              return (
+                <TabsContent key={product.id} value={product.id} className="mt-4">
+                  <div className="flex items-center justify-between gap-4 mb-4">
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" onClick={prevMonth}>
+                        &larr;
+                      </Button>
+                      <span className="text-sm font-medium min-w-[160px] text-center">
+                        {formatMonthLabel(currentMonth)}
+                      </span>
+                      <Button variant="outline" size="sm" onClick={nextMonth}>
+                        &rarr;
+                      </Button>
+                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      Line: {product.production_lines.name}
+                    </span>
+                  </div>
+
+                  <div className="rounded-xl border bg-card overflow-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="sticky left-0 bg-card z-10 min-w-[80px]">Team</TableHead>
+                          {days.map((day) => {
+                            const d = new Date(day + "T12:00:00")
+                            const wd = isWorkday(day)
+                            return (
+                              <TableHead
+                                key={day}
+                                className={`text-center min-w-[40px] px-1.5 text-xs ${
+                                  !wd ? "text-muted-foreground/50" : ""
+                                }`}
+                              >
+                                <div>{d.getDate()}</div>
+                              </TableHead>
+                            )
+                          })}
+                          <TableHead className="text-right font-semibold bg-muted/50">Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {rows.map((row) => (
+                          <TableRow key={row.team_id}>
+                            <TableCell className="sticky left-0 bg-card z-10 font-medium text-sm">
+                              {row.team_name}
+                            </TableCell>
+                            {days.map((day) => {
+                              const val = row.entries.get(day)
+                              const wd = isWorkday(day)
+                              return (
+                                <TableCell
+                                  key={day}
+                                  className={`text-center text-xs px-1.5 tabular-nums ${
+                                    !wd ? "text-muted-foreground/40" : ""
+                                  } ${val ? "font-medium" : ""}`}
+                                >
+                                  {val ?? (wd ? "-" : "")}
+                                </TableCell>
+                              )
+                            })}
+                            <TableCell className="text-right font-semibold tabular-nums bg-muted/50">
+                              {row.total || "-"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {/* Daily totals row */}
+                        <TableRow className="bg-muted/30 font-semibold">
+                          <TableCell className="sticky left-0 bg-muted/30 z-10 text-sm">
+                            Daily Total
+                          </TableCell>
+                          {days.map((day, i) => (
                             <TableCell
                               key={day}
                               className={`text-center text-xs px-1.5 tabular-nums ${
-                                !wd ? "text-muted-foreground/40" : ""
-                              } ${val ? "font-medium" : ""}`}
+                                !isWorkday(day) ? "text-muted-foreground/40" : ""
+                              }`}
                             >
-                              {val ?? (wd ? "-" : "")}
+                              {dailyTotals[i] || "-"}
                             </TableCell>
-                          )
-                        })}
-                        <TableCell className="text-right font-semibold tabular-nums bg-muted/50">
-                          {row.total || "-"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {/* Daily totals row */}
-                    <TableRow className="bg-muted/30 font-semibold">
-                      <TableCell className="sticky left-0 bg-muted/30 z-10 text-sm">
-                        Daily Total
-                      </TableCell>
-                      {days.map((day, i) => (
-                        <TableCell
-                          key={day}
-                          className={`text-center text-xs px-1.5 tabular-nums ${
-                            !isWorkday(day) ? "text-muted-foreground/40" : ""
-                          }`}
-                        >
-                          {dailyTotals[i] || "-"}
-                        </TableCell>
-                      ))}
-                      <TableCell className="text-right tabular-nums bg-muted/50">
-                        {grandTotal || "-"}
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-
-              {/* Monthly summary cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
-                {rows.map((row) => (
-                  <div
-                    key={row.team_id}
-                    className="rounded-lg border bg-card p-3 flex flex-col gap-1"
-                  >
-                    <span className="text-xs text-muted-foreground">{row.team_name}</span>
-                    <span className="text-lg font-semibold tabular-nums">
-                      {row.total.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">pallets</span>
-                    </span>
+                          ))}
+                          <TableCell className="text-right tabular-nums bg-muted/50">
+                            {grandTotal || "-"}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
                   </div>
-                ))}
-                <div className="rounded-lg border bg-primary/5 p-3 flex flex-col gap-1">
-                  <span className="text-xs text-muted-foreground">Grand Total</span>
-                  <span className="text-lg font-semibold tabular-nums">
-                    {grandTotal.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">pallets</span>
+
+                  {/* Monthly summary cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
+                    {rows.map((row) => (
+                      <div
+                        key={row.team_id}
+                        className="rounded-lg border bg-card p-3 flex flex-col gap-1"
+                      >
+                        <span className="text-xs text-muted-foreground">{row.team_name}</span>
+                        <span className="text-lg font-semibold tabular-nums">
+                          {row.total.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">pallets</span>
+                        </span>
+                      </div>
+                    ))}
+                    <div className="rounded-lg border bg-primary/5 p-3 flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Grand Total</span>
+                      <span className="text-lg font-semibold tabular-nums">
+                        {grandTotal.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">pallets</span>
+                      </span>
+                    </div>
+                  </div>
+                </TabsContent>
+              )
+            })}
+          </Tabs>
+
+          {/* Entry dialog */}
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Factory className="size-5 text-primary" />
+                  Enter Production
+                </DialogTitle>
+                <DialogDescription>
+                  Record daily production for{" "}
+                  <span className="font-medium text-foreground">
+                    {products.find((p) => p.id === activeProduct)?.name}
                   </span>
-                </div>
-              </div>
-            </TabsContent>
-          )
-        })}
-      </Tabs>
+                </DialogDescription>
+              </DialogHeader>
 
-      {/* Entry dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Factory className="size-5 text-primary" />
-              Enter Production
-            </DialogTitle>
-            <DialogDescription>
-              Record daily production for{" "}
-              <span className="font-medium text-foreground">
-                {products.find((p) => p.id === activeProduct)?.name}
-              </span>
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleEntrySubmit} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="entry-date">Date</Label>
-              <Input
-                id="entry-date"
-                type="date"
-                value={dialogDate}
-                onChange={(e) => setDialogDate(e.target.value)}
-                autoFocus
-              />
-            </div>
-
-            <div className="flex flex-col gap-3">
-              {getProductTeams(activeProduct!).map((team) => (
-                <div key={team.id} className="flex items-center gap-3">
-                  <Label className="text-sm min-w-[70px]">{team.name}</Label>
+              <form onSubmit={handleEntrySubmit} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="entry-date">Date</Label>
                   <Input
-                    type="number"
-                    min="0"
-                    step="1"
-                    placeholder="0"
-                    value={dialogQuantities[team.id] ?? ""}
-                    onChange={(e) =>
-                      setDialogQuantities((prev) => ({ ...prev, [team.id]: e.target.value }))
-                    }
-                    className="flex-1"
+                    id="entry-date"
+                    type="date"
+                    value={dialogDate}
+                    onChange={(e) => setDialogDate(e.target.value)}
+                    autoFocus
                   />
-                  <span className="text-xs text-muted-foreground shrink-0">pallets</span>
                 </div>
-              ))}
-            </div>
 
-            {dialogError && <p className="text-sm text-destructive">{dialogError}</p>}
+                <div className="flex flex-col gap-3">
+                  {getProductTeams(activeProduct!).map((team) => (
+                    <div key={team.id} className="flex items-center gap-3">
+                      <Label className="text-sm min-w-[70px]">{team.name}</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="0"
+                        value={dialogQuantities[team.id] ?? ""}
+                        onChange={(e) =>
+                          setDialogQuantities((prev) => ({ ...prev, [team.id]: e.target.value }))
+                        }
+                        className="flex-1"
+                      />
+                      <span className="text-xs text-muted-foreground shrink-0">pallets</span>
+                    </div>
+                  ))}
+                </div>
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={dialogLoading}>
-                {dialogLoading ? "Saving..." : "Save"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+                {dialogError && <p className="text-sm text-destructive">{dialogError}</p>}
+
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={dialogLoading}>
+                    {dialogLoading ? "Saving..." : "Save"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
+
+        {/* ── BOM tab ────────────────────────────────────────────────────── */}
+        <TabsContent value="bom" className="mt-4">
+          <BOMConfig />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

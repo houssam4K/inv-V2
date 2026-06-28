@@ -131,3 +131,13 @@ export interface ExpectedShipment {
   status: "pending" | "arrived"
   created_at: string
 }
+
+export interface BOMItem {
+  id: string
+  product_id: string
+  raw_material_id: string
+  unit_type: 'per_bottle' | 'per_fardeau' | 'per_pallet' | 'unknown'
+  quantity_per_unit: number | null
+  raw_materials?: { name: string; unit_of_measure: string }
+  products?: { name: string }
+}
