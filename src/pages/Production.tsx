@@ -241,7 +241,7 @@ export function Production() {
   const isWorkday = (dateStr: string) => {
     const d = new Date(dateStr + "T12:00:00")
     const dow = d.getDay()
-    return dow !== 0 && dow !== 6
+    return dow !== 5 && dow !== 6
   }
 
   if (loading) {

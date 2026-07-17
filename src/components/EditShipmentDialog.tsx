@@ -63,8 +63,6 @@ export function EditShipmentDialog({ shipment, open, onClose, onSaved }: Props) 
 
     setLoading(true)
 
-    const oldQty = shipment!.quantity
-    const qtyDiff = qty - oldQty
 
     // 1. Update the shipment record
     const { error: shipErr } = await supabase
@@ -79,22 +77,6 @@ export function EditShipmentDialog({ shipment, open, onClose, onSaved }: Props) 
       .eq("id", shipment!.id)
 
     if (shipErr) { setError(shipErr.message); setLoading(false); return }
-
-    // 2. Adjust raw material current_quantity if quantity changed
-    if (qtyDiff !== 0) {
-      const { data: mat } = await supabase
-        .from("raw_materials")
-        .select("current_quantity")
-        .eq("id", shipment!.raw_material_id)
-        .single()
-
-      if (mat) {
-        await supabase
-          .from("raw_materials")
-          .update({ current_quantity: mat.current_quantity + qtyDiff })
-          .eq("id", shipment!.raw_material_id)
-      }
-    }
 
     // 3. Update the linked stock movement if it exists (by shipment_id)
     const { data: movRows } = await supabase

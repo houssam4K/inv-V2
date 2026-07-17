@@ -98,6 +98,7 @@ export function StockStatus() {
   if (detailMaterial) {
     return (
       <MaterialDetail
+        key={detailMaterial.id}
         material={detailMaterial}
         onBack={() => setDetailMaterial(null)}
         onUpdated={handleMaterialUpdated}

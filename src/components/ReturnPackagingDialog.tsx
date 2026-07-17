@@ -25,6 +25,7 @@ export function ReturnPackagingDialog({ supplier, open, onClose, onDone }: Props
   const [qtys, setQtys] = React.useState<Record<string, string>>({ box: "", pallet: "", mandrin: "" })
   const [date, setDate] = React.useState("")
   const [note, setNote] = React.useState("")
+  const [bonNumber, setBonNumber] = React.useState("")
   const [error, setError] = React.useState("")
   const [loading, setLoading] = React.useState(false)
 
@@ -33,6 +34,7 @@ export function ReturnPackagingDialog({ supplier, open, onClose, onDone }: Props
       setQtys({ box: "", pallet: "", mandrin: "" })
       setDate(new Date().toISOString().slice(0, 10))
       setNote("")
+      setBonNumber("")
       setError("")
     }
   }, [open])
@@ -43,6 +45,7 @@ export function ReturnPackagingDialog({ supplier, open, onClose, onDone }: Props
 
     if (!date) { setError("Date is required."); return }
 
+    const batchId = crypto.randomUUID()
     const inserts = PACKAGING_TYPES
       .filter((pt) => {
         const v = parseInt(qtys[pt.value] ?? "", 10)
@@ -55,6 +58,8 @@ export function ReturnPackagingDialog({ supplier, open, onClose, onDone }: Props
         quantity: parseInt(qtys[pt.value], 10),
         date,
         note: note.trim() || null,
+        bon_number: bonNumber.trim() || null,
+        batch_id: batchId,
       }))
 
     if (inserts.length === 0) {
@@ -127,6 +132,15 @@ export function ReturnPackagingDialog({ supplier, open, onClose, onDone }: Props
                 placeholder="e.g. After cleaning"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-2 col-span-2">
+              <Label htmlFor="ret-bon">N° Bon (optionnel)</Label>
+              <Input
+                id="ret-bon"
+                placeholder="e.g. BR-1234"
+                value={bonNumber}
+                onChange={(e) => setBonNumber(e.target.value)}
               />
             </div>
           </div>

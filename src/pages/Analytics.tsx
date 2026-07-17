@@ -220,6 +220,8 @@ export function Analytics() {
   const [bomItems, setBomItems] = React.useState<BOMItem[]>([])
   const [loading, setLoading] = React.useState(true)
   const [trendMode, setTrendMode] = React.useState<'month' | 'week'>('month')
+  const [histMovements, setHistMovements] = React.useState<StockMovement[]>([])
+  const [histProduction, setHistProduction] = React.useState<ProductionEntryRow[]>([])
 
   // ── Date range ───────────────────────────────────────────────────────────────
   const { start, end } = React.useMemo(() => {
@@ -256,6 +258,26 @@ export function Analytics() {
     load()
     return () => { cancelled = true }
   }, [start, end])
+
+  React.useEffect(() => {
+    let cancelled = false
+    async function loadHist() {
+      const now = new Date()
+      // Go back 5 months + current month = 6 months total
+      const d = new Date(now.getFullYear(), now.getMonth() - 5, 1)
+      const histStart = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`
+
+      const [movsRes, prodRes] = await Promise.all([
+        supabase.from("stock_movements").select("*").gte("date", histStart).eq("movement_type", "OUT"),
+        supabase.from("production_entries").select("*, products(name)").gte("date", histStart),
+      ])
+      if (cancelled) return
+      setHistMovements((movsRes.data as StockMovement[]) ?? [])
+      setHistProduction((prodRes.data as ProductionEntryRow[]) ?? [])
+    }
+    loadHist()
+    return () => { cancelled = true }
+  }, [])
 
   // ── Navigation ───────────────────────────────────────────────────────────────
   function prev() {
@@ -347,32 +369,7 @@ export function Analytics() {
     productNames.every((n) => (row[n] as number) === 0)
   )
 
-  // ── Per-product BOM consumption ──────────────────────────────────────────
-  // For each product spec, find which raw materials match each BOM keyword,
-  // and sum their OUT movements for the period.
-  const perProductBOM = React.useMemo(() => {
-    return PRODUCT_SPECS.map((spec) => {
-      // Find production totals for products matching this spec
-      const prod = productTotals.find((p) => p.spec?.key === spec.key)
 
-      const bomRows = spec.bom.map((keyword) => {
-        const matched = materials.filter((m) => matchesBOM(m.name, keyword))
-        const consumed = outMovements
-          .filter((mv) => matched.some((mat) => mat.id === mv.raw_material_id))
-          .reduce((s, mv) => s + Number(mv.quantity), 0)
-        const unit = matched[0]?.unit_of_measure ?? ""
-        return {
-          keyword,
-          matchedNames: matched.map((m) => m.name),
-          consumed,
-          unit,
-          hasMatch: matched.length > 0,
-        }
-      })
-
-      return { spec, prod, bomRows }
-    })
-  }, [PRODUCT_SPECS, materials, outMovements, productTotals])
 
   // ── Chart B: Overall consumption per material ─────────────────────────────
   const consumptionChartData = React.useMemo(() => {
@@ -522,7 +519,7 @@ export function Analytics() {
         if (!mat) continue
         if (!allMatNames.includes(mat.name)) allMatNames.push(mat.name)
 
-        const actual = outMovements
+        const actual = histMovements
           .filter((mv) => {
             const d = new Date(mv.date)
             return mv.raw_material_id === matId && d >= period.start && d < period.end
@@ -538,7 +535,7 @@ export function Analytics() {
           )
           if (!spec) continue
 
-          const pallets = productionEntries
+          const pallets = histProduction
             .filter((e) => {
               const d = new Date(e.date)
               return e.products?.name === bomItem.products?.name && d >= period.start && d < period.end
@@ -577,7 +574,7 @@ export function Analytics() {
     })
 
     return { trendData: rows, materialNames: allMatNames }
-  }, [bomItems, materials, outMovements, productionEntries, trendMode])
+  }, [bomItems, materials, histMovements, histProduction, trendMode])
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -658,8 +655,8 @@ export function Analytics() {
               <SummaryCard
                 icon={Trash2}
                 label="Déchets"
-                value={totalDechets > 0 ? totalDechets.toLocaleString() : "—"}
-                sub={totalDechets > 0 ? `${dechetMovements.length} mouvements` : "Aucun déchet enregistré"}
+                value={dechetMovements.length > 0 ? dechetMovements.length.toLocaleString() : "—"}
+                sub={dechetMovements.length > 0 ? "mouvements" : "Aucun déchet enregistré"}
                 accent="amber"
               />
               <SummaryCard
@@ -742,104 +739,6 @@ export function Analytics() {
               </div>
             </ChartCard>
 
-            {/* ── Per-product BOM consumption ───────────────────────────────── */}
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold">Consommation par produit</h2>
-                <span className="text-xs text-muted-foreground">
-                  Basé sur les mouvements OUT de la période
-                </span>
-              </div>
-
-              {perProductBOM.map(({ spec, prod, bomRows }) => {
-                const hasAnyConsumption = bomRows.some((r) => r.consumed > 0)
-                return (
-                  <div
-                    key={spec.key}
-                    className="rounded-xl border bg-card overflow-hidden shadow-sm"
-                    style={{ borderTopWidth: 3, borderTopColor: spec.chartColor }}
-                  >
-                    {/* Product header */}
-                    <div className="px-5 py-3 flex items-center justify-between gap-4 border-b bg-muted/20">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="size-3 rounded-full shrink-0"
-                          style={{ background: spec.chartColor }}
-                        />
-                        <span className="font-semibold text-sm">{spec.label}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {spec.bottlesPerPallet} bouteilles / palette
-                        </span>
-                      </div>
-                      {prod ? (
-                        <div className="flex items-center gap-4 text-sm">
-                          <span className="tabular-nums">
-                            <span className="font-semibold">{prod.pallets.toLocaleString()}</span>
-                            <span className="text-muted-foreground ml-1">pallets</span>
-                          </span>
-                          <span className="tabular-nums">
-                            <span className="font-semibold">{prod.bottles.toLocaleString()}</span>
-                            <span className="text-muted-foreground ml-1">bouteilles</span>
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">Aucune production cette période</span>
-                      )}
-                    </div>
-
-                    {/* BOM table */}
-                    <div className="divide-y">
-                      {bomRows.map((row) => (
-                        <div
-                          key={row.keyword}
-                          className="px-5 py-2.5 flex items-center gap-3 text-sm"
-                        >
-                          {/* Color dot for matched/unmatched */}
-                          <div
-                            className={`size-2 rounded-full shrink-0 ${
-                              row.hasMatch ? "bg-emerald-500" : "bg-muted-foreground/30"
-                            }`}
-                          />
-                          {/* Material label (BOM keyword) */}
-                          <span className="capitalize min-w-[160px] font-medium text-sm">
-                            {row.keyword}
-                          </span>
-                          {/* Matched DB name(s) */}
-                          <span className="text-xs text-muted-foreground flex-1 truncate">
-                            {row.matchedNames.length > 0
-                              ? row.matchedNames.join(", ")
-                              : <span className="italic">Non trouvé dans la base</span>}
-                          </span>
-                          {/* Consumed */}
-                          {row.hasMatch ? (
-                            <span
-                              className={`tabular-nums font-semibold ${
-                                row.consumed === 0 ? "text-muted-foreground" : ""
-                              }`}
-                            >
-                              {row.consumed > 0 ? row.consumed.toLocaleString() : "—"}
-                              {row.unit && row.consumed > 0 && (
-                                <span className="font-normal text-muted-foreground ml-1 text-xs">
-                                  {row.unit}
-                                </span>
-                              )}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-
-                    {!hasAnyConsumption && (
-                      <div className="px-5 py-2 text-xs text-muted-foreground border-t bg-muted/10">
-                        Aucun mouvement OUT enregistré pour ces matières cette période.
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
 
             {/* ── Chart B: Global consumption per material ───────────────────── */}
             <ChartCard

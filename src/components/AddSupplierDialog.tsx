@@ -24,6 +24,10 @@ export function AddSupplierDialog({ onCreated }: Props) {
   const [contactPerson, setContactPerson] = React.useState("")
   const [phone, setPhone] = React.useState("")
   const [email, setEmail] = React.useState("")
+  const [nif, setNif] = React.useState("")
+  const [rc, setRc] = React.useState("")
+  const [artNumber, setArtNumber] = React.useState("")
+  const [address, setAddress] = React.useState("")
   const [error, setError] = React.useState("")
   const [loading, setLoading] = React.useState(false)
 
@@ -32,6 +36,10 @@ export function AddSupplierDialog({ onCreated }: Props) {
     setContactPerson("")
     setPhone("")
     setEmail("")
+    setNif("")
+    setRc("")
+    setArtNumber("")
+    setAddress("")
     setError("")
   }
 
@@ -48,6 +56,10 @@ export function AddSupplierDialog({ onCreated }: Props) {
       contact_person: contactPerson.trim() || null,
       phone: phone.trim() || null,
       email: email.trim() || null,
+      nif: nif.trim() || null,
+      rc: rc.trim() || null,
+      art_number: artNumber.trim() || null,
+      address: address.trim() || null,
     })
     setLoading(false)
     if (dbError) {
@@ -117,6 +129,24 @@ export function AddSupplierDialog({ onCreated }: Props) {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="sup-address">Address (optional)</Label>
+            <Input id="sup-address" value={address} onChange={(e) => setAddress(e.target.value)} />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="sup-rc">RC (optional)</Label>
+              <Input id="sup-rc" value={rc} onChange={(e) => setRc(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="sup-art">N° ART (optional)</Label>
+              <Input id="sup-art" value={artNumber} onChange={(e) => setArtNumber(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="sup-nif">NIF (optional)</Label>
+              <Input id="sup-nif" value={nif} onChange={(e) => setNif(e.target.value)} />
             </div>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}

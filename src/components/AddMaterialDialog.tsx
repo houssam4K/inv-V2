@@ -1,5 +1,5 @@
 import * as React from "react";
-import { PackagePlus } from "lucide-react";
+import { PackagePlus, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -32,6 +32,11 @@ export function AddMaterialDialog({ onCreated }: Props) {
   const [unit, setUnit] = React.useState<UnitOfMeasure | "">("");
   const [openingStock, setOpeningStock] = React.useState("");
   const [dailyConsumption, setDailyConsumption] = React.useState("");
+  const [pkgLevel1Label, setPkgLevel1Label] = React.useState("");
+  const [pkgLevel1Size, setPkgLevel1Size] = React.useState("");
+  const [pkgLevel2Label, setPkgLevel2Label] = React.useState("");
+  const [pkgLevel2Size, setPkgLevel2Size] = React.useState("");
+  const [showPackaging, setShowPackaging] = React.useState(false);
   const [error, setError] = React.useState("");
   const [loading, setLoading] = React.useState(false);
 
@@ -40,6 +45,11 @@ export function AddMaterialDialog({ onCreated }: Props) {
     setUnit("");
     setOpeningStock("");
     setDailyConsumption("");
+    setPkgLevel1Label("");
+    setPkgLevel1Size("");
+    setPkgLevel2Label("");
+    setPkgLevel2Size("");
+    setShowPackaging(false);
     setError("");
   }
 
@@ -69,16 +79,40 @@ export function AddMaterialDialog({ onCreated }: Props) {
       return;
     }
 
+    const l1s = pkgLevel1Size.trim() !== "" ? parseFloat(pkgLevel1Size) : null;
+    const l2s = pkgLevel2Size.trim() !== "" ? parseFloat(pkgLevel2Size) : null;
+
+    if (showPackaging) {
+      if (pkgLevel1Label.trim() && !l1s) { setError("Level 1 size is required if label is provided."); return; }
+      if (l1s && !pkgLevel1Label.trim()) { setError("Level 1 label is required if size is provided."); return; }
+      if ((pkgLevel2Label.trim() || l2s) && (!pkgLevel1Label.trim() || !l1s)) { setError("Level 1 packaging must be configured to use Level 2."); return; }
+      if (pkgLevel2Label.trim() && !l2s) { setError("Level 2 size is required if label is provided."); return; }
+      if (l2s && !pkgLevel2Label.trim()) { setError("Level 2 label is required if size is provided."); return; }
+      if (l1s !== null && l1s <= 0) { setError("Level 1 size must be positive."); return; }
+      if (l2s !== null && l2s <= 0) { setError("Level 2 size must be positive."); return; }
+    }
+
     setLoading(true);
+
+    const insertData: any = {
+      name: name.trim(),
+      unit_of_measure: unit,
+      current_quantity: 0,
+      daily_consumption: dc,
+    };
+
+    if (showPackaging && pkgLevel1Label.trim() && l1s) {
+      insertData.packaging_level1_label = pkgLevel1Label.trim();
+      insertData.packaging_level1_size = l1s;
+      if (pkgLevel2Label.trim() && l2s) {
+        insertData.packaging_level2_label = pkgLevel2Label.trim();
+        insertData.packaging_level2_size = l2s;
+      }
+    }
 
     const { data: matData, error: dbError } = await supabase
       .from("raw_materials")
-      .insert({
-        name: name.trim(),
-        unit_of_measure: unit,
-        current_quantity: os,
-        daily_consumption: dc,
-      })
+      .insert(insertData)
       .select("id")
       .single();
 
@@ -93,6 +127,14 @@ export function AddMaterialDialog({ onCreated }: Props) {
     }
 
     // Record opening stock as an initial stock movement
+    if (os > 0) {
+      await supabase.from("stock_movements").insert({
+        raw_material_id: matData.id,
+        movement_type: "IN",
+        quantity: os,
+        note: "Opening balance",
+      });
+    }
 
     setLoading(false);
     reset();
@@ -193,6 +235,44 @@ export function AddMaterialDialog({ onCreated }: Props) {
             <p className="text-xs text-muted-foreground -mt-1">
               Used to calculate days remaining and forecast stock.
             </p>
+          </div>
+
+          <div className="flex flex-col gap-2 rounded-md border p-3 bg-muted/20">
+            <button
+              type="button"
+              className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors text-left"
+              onClick={() => setShowPackaging(!showPackaging)}
+            >
+              {showPackaging ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              Packaging Configuration (Display Only)
+            </button>
+            {showPackaging && (
+              <div className="flex flex-col gap-4 mt-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                <p className="text-xs text-muted-foreground">
+                  This is only used to show a converted count on the material page. It does not affect stock movements or calculations.
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="pkg-l1-label" className="text-xs">Level 1 Label</Label>
+                    <Input id="pkg-l1-label" placeholder="e.g. Carton" value={pkgLevel1Label} onChange={e => setPkgLevel1Label(e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="pkg-l1-size" className="text-xs">Base units per L1</Label>
+                    <Input id="pkg-l1-size" type="number" min="1" step="any" placeholder="e.g. 6000" value={pkgLevel1Size} onChange={e => setPkgLevel1Size(e.target.value)} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="pkg-l2-label" className="text-xs">Level 2 Label (optional)</Label>
+                    <Input id="pkg-l2-label" placeholder="e.g. Pallet" value={pkgLevel2Label} onChange={e => setPkgLevel2Label(e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="pkg-l2-size" className="text-xs">L1 units per L2</Label>
+                    <Input id="pkg-l2-size" type="number" min="1" step="any" placeholder="e.g. 30" value={pkgLevel2Size} onChange={e => setPkgLevel2Size(e.target.value)} />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>

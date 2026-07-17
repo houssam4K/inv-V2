@@ -25,6 +25,10 @@ export function EditSupplierDialog({ supplier, open, onClose, onSaved }: Props) 
   const [contactPerson, setContactPerson] = React.useState("")
   const [phone, setPhone] = React.useState("")
   const [email, setEmail] = React.useState("")
+  const [nif, setNif] = React.useState("")
+  const [rc, setRc] = React.useState("")
+  const [artNumber, setArtNumber] = React.useState("")
+  const [address, setAddress] = React.useState("")
   const [error, setError] = React.useState("")
   const [loading, setLoading] = React.useState(false)
 
@@ -34,6 +38,10 @@ export function EditSupplierDialog({ supplier, open, onClose, onSaved }: Props) 
       setContactPerson(supplier.contact_person ?? "")
       setPhone(supplier.phone ?? "")
       setEmail(supplier.email ?? "")
+      setNif(supplier.nif ?? "")
+      setRc(supplier.rc ?? "")
+      setArtNumber(supplier.art_number ?? "")
+      setAddress(supplier.address ?? "")
       setError("")
     }
   }, [supplier, open])
@@ -51,6 +59,10 @@ export function EditSupplierDialog({ supplier, open, onClose, onSaved }: Props) 
         contact_person: contactPerson.trim() || null,
         phone: phone.trim() || null,
         email: email.trim() || null,
+        nif: nif.trim() || null,
+        rc: rc.trim() || null,
+        art_number: artNumber.trim() || null,
+        address: address.trim() || null,
       })
       .eq("id", supplier!.id)
       .select()
@@ -86,6 +98,24 @@ export function EditSupplierDialog({ supplier, open, onClose, onSaved }: Props) 
             <div className="flex flex-col gap-2">
               <Label htmlFor="esup-email">Email (optional)</Label>
               <Input id="esup-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="esup-address">Address (optional)</Label>
+            <Input id="esup-address" value={address} onChange={(e) => setAddress(e.target.value)} />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="esup-rc">RC (optional)</Label>
+              <Input id="esup-rc" value={rc} onChange={(e) => setRc(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="esup-art">N° ART (optional)</Label>
+              <Input id="esup-art" value={artNumber} onChange={(e) => setArtNumber(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="esup-nif">NIF (optional)</Label>
+              <Input id="esup-nif" value={nif} onChange={(e) => setNif(e.target.value)} />
             </div>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}

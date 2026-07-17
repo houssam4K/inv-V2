@@ -40,6 +40,8 @@ interface EntryRow {
 interface SessionWithStats extends InventorySession {
   entryCount: number
   totalEcart: number
+  lossCount: number
+  surplusCount: number
 }
 
 function formatDate(iso: string) {
@@ -273,8 +275,10 @@ function SessionList({ onSelect, onRefreshKey }: ListProps) {
 
     const withStats: SessionWithStats[] = sessList.map((s) => {
       const ents = entList.filter((e) => e.session_id === s.id)
+      const lossCount = ents.filter(e => e.theoretical_quantity - e.real_quantity > 0).length
+      const surplusCount = ents.filter(e => e.theoretical_quantity - e.real_quantity < 0).length
       const totalEcart = ents.reduce((acc, e) => acc + (e.theoretical_quantity - e.real_quantity), 0)
-      return { ...s, entryCount: ents.length, totalEcart }
+      return { ...s, entryCount: ents.length, totalEcart, lossCount, surplusCount }
     })
 
     setSessions(withStats)
@@ -312,8 +316,8 @@ function SessionList({ onSelect, onRefreshKey }: ListProps) {
   return (
     <div className="flex flex-col gap-3">
       {sessions.map((s) => {
-        const hasLoss = s.totalEcart > 0
-        const hasSurplus = s.totalEcart < 0
+        const hasLoss = s.lossCount > 0
+        const hasSurplus = s.surplusCount > 0
         return (
           <button
             key={s.id}
@@ -342,7 +346,7 @@ function SessionList({ onSelect, onRefreshKey }: ListProps) {
                     className="text-amber-700 border-amber-300 dark:text-amber-400 dark:border-amber-800 text-xs gap-1"
                   >
                     <AlertTriangle className="size-3" />
-                    Écart −{s.totalEcart}
+                    {s.lossCount} Perte{s.lossCount !== 1 ? 's' : ''}
                   </Badge>
                 )}
                 {hasSurplus && (
@@ -351,7 +355,7 @@ function SessionList({ onSelect, onRefreshKey }: ListProps) {
                     className="text-blue-700 border-blue-300 dark:text-blue-400 dark:border-blue-800 text-xs gap-1"
                   >
                     <XCircle className="size-3" />
-                    Surplus +{Math.abs(s.totalEcart)}
+                    {s.surplusCount} Surplus
                   </Badge>
                 )}
                 {!hasLoss && !hasSurplus && s.entryCount > 0 && (

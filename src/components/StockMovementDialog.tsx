@@ -71,30 +71,24 @@ export function StockMovementDialog({ material, type, onClose, onDone }: Props) 
 
     setLoading(true)
 
-    const newQuantity = isIn
-      ? material!.current_quantity + qty
-      : material!.current_quantity - qty
-
-    const [movRes, matRes] = await Promise.all([
-      supabase.from("stock_movements").insert({
-        raw_material_id: material!.id,
-        movement_type: type,
-        quantity: qty,
-        date: date ? new Date(date).toISOString() : undefined,
-        note: note.trim() || null,
-        supplier_name: isIn && supplierName.trim() ? supplierName.trim() : null,
-        invoice_number: isIn && invoiceNumber.trim() ? invoiceNumber.trim() : null,
-      }),
-      supabase
-        .from("raw_materials")
-        .update({ current_quantity: newQuantity })
-        .eq("id", material!.id),
-    ])
+    const movRes = await supabase.from("stock_movements").insert({
+      raw_material_id: material!.id,
+      movement_type: type,
+      quantity: qty,
+      date: date ? new Date(date).toISOString() : undefined,
+      note: note.trim() || null,
+      supplier_name: isIn && supplierName.trim() ? supplierName.trim() : null,
+      invoice_number: isIn && invoiceNumber.trim() ? invoiceNumber.trim() : null,
+    })
 
     setLoading(false)
 
-    if (movRes.error || matRes.error) {
-      setError(movRes.error?.message ?? matRes.error?.message ?? "An error occurred.")
+    if (movRes.error) {
+      if (movRes.error.message.includes("current_quantity_non_negative")) {
+        setError(`Cannot subtract ${qty} ${material!.unit_of_measure} — it would cause stock to go negative. Another user may have just consumed stock.`)
+      } else {
+        setError(movRes.error.message)
+      }
       return
     }
 

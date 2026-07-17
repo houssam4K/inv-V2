@@ -38,6 +38,7 @@ export function NewShipmentDialog({ supplier, open, onClose, onDone }: Props) {
   const [invoiceNumber, setInvoiceNumber] = React.useState("")
   const [date, setDate] = React.useState("")
   const [note, setNote] = React.useState("")
+  const [bonNumber, setBonNumber] = React.useState("")
   const [showPackaging, setShowPackaging] = React.useState(false)
   const [packagingQtys, setPackagingQtys] = React.useState<Record<string, string>>({ box: "", pallet: "", mandrin: "" })
   const [error, setError] = React.useState("")
@@ -58,6 +59,7 @@ export function NewShipmentDialog({ supplier, open, onClose, onDone }: Props) {
       setUnitPrice("")
       setInvoiceNumber("")
       setNote("")
+      setBonNumber("")
       setShowPackaging(false)
       setPackagingQtys({ box: "", pallet: "", mandrin: "" })
       setError("")
@@ -96,33 +98,27 @@ export function NewShipmentDialog({ supplier, open, onClose, onDone }: Props) {
 
     if (shipErr) { setError(shipErr.message); setLoading(false); return }
 
-    // 2. Insert stock movement + update material qty in parallel
-    const newQty = material.current_quantity + qty
-    const [movRes, matRes] = await Promise.all([
-      supabase.from("stock_movements").insert({
-        raw_material_id: materialId,
-        movement_type: "IN",
-        quantity: qty,
-        date: new Date(date).toISOString(),
-        supplier_name: supplier!.name,
-        invoice_number: invoiceNumber.trim() || null,
-        note: note.trim() || null,
-        shipment_id: shipmentData.id,
-      }),
-      supabase
-        .from("raw_materials")
-        .update({ current_quantity: newQty })
-        .eq("id", materialId),
-    ])
+    // 2. Insert stock movement
+    const movRes = await supabase.from("stock_movements").insert({
+      raw_material_id: materialId,
+      movement_type: "IN",
+      quantity: qty,
+      date: new Date(date).toISOString(),
+      supplier_name: supplier!.name,
+      invoice_number: invoiceNumber.trim() || null,
+      note: note.trim() || null,
+      shipment_id: shipmentData.id,
+    })
 
-    if (movRes.error || matRes.error) {
-      setError(movRes.error?.message ?? matRes.error?.message ?? "Error updating stock.")
+    if (movRes.error) {
+      setError(movRes.error.message)
       setLoading(false)
       return
     }
 
     // 3. Insert packaging transactions (SENT) if any
     if (showPackaging) {
+      const batchId = crypto.randomUUID()
       const pkgInserts = PACKAGING_TYPES
         .filter((pt) => {
           const v = parseInt(packagingQtys[pt.value] ?? "", 10)
@@ -135,6 +131,8 @@ export function NewShipmentDialog({ supplier, open, onClose, onDone }: Props) {
           quantity: parseInt(packagingQtys[pt.value], 10),
           date,
           shipment_id: shipmentData.id,
+          bon_number: bonNumber.trim() || null,
+          batch_id: batchId,
         }))
 
       if (pkgInserts.length > 0) {
@@ -232,15 +230,26 @@ export function NewShipmentDialog({ supplier, open, onClose, onDone }: Props) {
             </div>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="ship-note">Note (optional)</Label>
-            <Textarea
-              id="ship-note"
-              placeholder="e.g. Batch A, good quality"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              className="min-h-[60px]"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="ship-note">Note (optional)</Label>
+              <Textarea
+                id="ship-note"
+                placeholder="e.g. Batch A, good quality"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                className="min-h-[60px]"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="ship-bon">N° Bon (optionnel)</Label>
+              <Input
+                id="ship-bon"
+                placeholder="e.g. BL-1234"
+                value={bonNumber}
+                onChange={(e) => setBonNumber(e.target.value)}
+              />
+            </div>
           </div>
 
           <Separator />
@@ -249,7 +258,7 @@ export function NewShipmentDialog({ supplier, open, onClose, onDone }: Props) {
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Packaging Received (optional)
+                Emballages envoyés (par le fournisseur)
               </p>
               <Button
                 type="button"

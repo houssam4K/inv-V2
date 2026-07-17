@@ -60,11 +60,6 @@ export function EditStockMovementDialog({ movement, open, onClose, onSaved }: Pr
 
     setLoading(true)
 
-    const oldQty = movement!.quantity
-    const oldType = movement!.movement_type
-    const oldDelta = oldType === "IN" ? oldQty : -oldQty
-    const newDelta = movementType === "IN" ? qty : -qty
-    const diff = newDelta - oldDelta
 
     // Update the stock movement
     const { error: movErr } = await supabase
@@ -80,22 +75,6 @@ export function EditStockMovementDialog({ movement, open, onClose, onSaved }: Pr
       .eq("id", movement!.id)
 
     if (movErr) { setError(movErr.message); setLoading(false); return }
-
-    // Adjust raw material current_quantity if delta changed
-    if (diff !== 0) {
-      const { data: mat } = await supabase
-        .from("raw_materials")
-        .select("current_quantity")
-        .eq("id", movement!.raw_material_id)
-        .single()
-
-      if (mat) {
-        await supabase
-          .from("raw_materials")
-          .update({ current_quantity: Math.max(0, mat.current_quantity + diff) })
-          .eq("id", movement!.raw_material_id)
-      }
-    }
 
     setLoading(false)
     onSaved()

@@ -14,6 +14,10 @@ export interface RawMaterial {
   unit_of_measure: UnitOfMeasure
   current_quantity: number
   daily_consumption: number | null
+  packaging_level1_label: string | null
+  packaging_level1_size: number | null
+  packaging_level2_label: string | null
+  packaging_level2_size: number | null
   created_at: string
 }
 
@@ -64,6 +68,10 @@ export interface Supplier {
   contact_person: string | null
   phone: string | null
   email: string | null
+  nif: string | null
+  rc: string | null
+  art_number: string | null
+  address: string | null
   created_at: string
 }
 
@@ -96,6 +104,8 @@ export interface PackagingTransaction {
   date: string
   shipment_id: string | null
   note: string | null
+  bon_number: string | null
+  batch_id: string | null
   created_at: string
 }
 
@@ -140,4 +150,33 @@ export interface BOMItem {
   quantity_per_unit: number | null
   raw_materials?: { name: string; unit_of_measure: string }
   products?: { name: string }
+}
+
+export type SupplierDocumentType = "BC" | "BR"
+
+export interface SupplierDocumentItem {
+  id: string
+  document_id: string
+  position: number
+  code: string | null
+  designation: string
+  quantity: number
+  unit: string | null
+  unit_price: number | null
+}
+
+export interface SupplierDocument {
+  id: string
+  doc_type: SupplierDocumentType
+  number: string
+  supplier_id: string
+  date: string
+  v_commande: string | null
+  n_commande: string | null
+  mode_paiement: string | null
+  delai_livraison: string | null
+  lieu_livraison: string | null
+  tva_rate: number | null
+  observations: string | null
+  created_at: string
 }

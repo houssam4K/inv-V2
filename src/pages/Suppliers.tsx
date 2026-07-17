@@ -56,13 +56,17 @@ import { EditShipmentDialog, type ShipmentEditRow } from "@/components/EditShipm
 import { EditPackagingDialog } from "@/components/EditPackagingDialog"
 import { NewShipmentDialog } from "@/components/NewShipmentDialog"
 import { ReturnPackagingDialog } from "@/components/ReturnPackagingDialog"
+import { GeneratePurchaseOrderDialog } from "@/components/GeneratePurchaseOrderDialog"
+import { GenerateReturnNoteDialog } from "@/components/GenerateReturnNoteDialog"
 import { supabase } from "@/lib/supabase"
 import {
   PACKAGING_TYPES,
   type PackagingTransaction,
   type Supplier,
+  type SupplierDocument,
+  type SupplierDocumentItem
 } from "@/lib/types"
-import { exportPackagingPDF } from "@/lib/pdf"
+import { exportPackagingPDF, exportPurchaseOrderPDF, exportReturnNotePDF } from "@/lib/pdf"
 
 interface ShipmentRow {
   id: string
@@ -249,13 +253,13 @@ interface PackagingBalance {
 function PackagingBalanceSection({
   transactions,
   filteredTransactions,
-  supplierName,
+  supplier,
   onEdit,
   onDelete,
 }: {
   transactions: PackagingTransaction[]
   filteredTransactions: PackagingTransaction[]
-  supplierName: string
+  supplier: Supplier
   onEdit: (t: PackagingTransaction) => void
   onDelete: (t: PackagingTransaction) => void
 }) {
@@ -276,7 +280,7 @@ function PackagingBalanceSection({
   }, [filteredTransactions])
 
   function handleExport() {
-    exportPackagingPDF(supplierName, transactions)
+    exportPackagingPDF(supplier, transactions)
   }
 
   return (
@@ -439,6 +443,10 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
   const [editPackaging, setEditPackaging] = React.useState<PackagingTransaction | null>(null)
   const [deletePackagingTarget, setDeletePackagingTarget] = React.useState<PackagingTransaction | null>(null)
   const [deletingPackaging, setDeletingPackaging] = React.useState(false)
+  const [bcDialogOpen, setBcDialogOpen] = React.useState(false)
+  const [brDialogOpen, setBrDialogOpen] = React.useState(false)
+  const [documents, setDocuments] = React.useState<(SupplierDocument & { items: SupplierDocumentItem[] })[]>([])
+  const [deleteDocTarget, setDeleteDocTarget] = React.useState<string | null>(null)
   const [selectedMonth, setSelectedMonth] = React.useState(() => {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
@@ -446,7 +454,7 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
 
   async function load() {
     setLoading(true)
-    const [shipRes, pkgRes] = await Promise.all([
+    const [shipRes, pkgRes, docRes] = await Promise.all([
       supabase
         .from("shipments")
         .select("*, raw_materials(name, unit_of_measure)")
@@ -457,9 +465,15 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
         .select("*")
         .eq("supplier_id", supplier.id)
         .order("date", { ascending: false }),
+      supabase
+        .from("supplier_documents")
+        .select("*, items:supplier_document_items(*)")
+        .eq("supplier_id", supplier.id)
+        .order("created_at", { ascending: false }),
     ])
     setShipments((shipRes.data as ShipmentRow[]) ?? [])
     setPackaging((pkgRes.data as PackagingTransaction[]) ?? [])
+    setDocuments((docRes.data as any) ?? [])
     setLoading(false)
   }
 
@@ -507,28 +521,15 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
     if (!deleteShipmentTarget) return
     setDeletingShipment(true)
 
-    // Find and delete the associated stock movement, then revert material qty
+    // Delete the associated stock movement
     const { data: movRows } = await supabase
       .from("stock_movements")
-      .select("id, quantity")
+      .select("id")
       .eq("shipment_id", deleteShipmentTarget.id)
       .limit(1)
 
     if (movRows && movRows.length > 0) {
-      const mov = movRows[0]
-      // Revert the material quantity
-      const { data: mat } = await supabase
-        .from("raw_materials")
-        .select("current_quantity")
-        .eq("id", deleteShipmentTarget.raw_material_id)
-        .single()
-      if (mat) {
-        await supabase
-          .from("raw_materials")
-          .update({ current_quantity: Math.max(0, mat.current_quantity - mov.quantity) })
-          .eq("id", deleteShipmentTarget.raw_material_id)
-      }
-      await supabase.from("stock_movements").delete().eq("id", mov.id)
+      await supabase.from("stock_movements").delete().eq("id", movRows[0].id)
     }
 
     // Explicitly delete any packaging transactions tied to this shipment
@@ -554,6 +555,12 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
 
     setDeletingPackaging(false)
     setDeletePackagingTarget(null)
+    await load()
+  }
+
+  async function handleDeleteDocument(id: string) {
+    await supabase.from("supplier_documents").delete().eq("id", id)
+    setDeleteDocTarget(null)
     await load()
   }
 
@@ -589,7 +596,23 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <FileDown className="size-3.5" />
+                Générer Document
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setBcDialogOpen(true)}>
+                Bon de Commande (BC)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setBrDialogOpen(true)}>
+                Bon de Retour (BR)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setReturnDialogOpen(true)}>
             <RotateCcw className="size-3.5" />
             Return Packaging
@@ -650,6 +673,7 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
               )}
             </TabsTrigger>
             <TabsTrigger value="packaging">Packaging</TabsTrigger>
+            <TabsTrigger value="documents">Documents</TabsTrigger>
           </TabsList>
 
           <TabsContent value="history" className="mt-4">
@@ -761,10 +785,75 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
             <PackagingBalanceSection
               transactions={packaging}
               filteredTransactions={filteredPackaging}
-              supplierName={supplier.name}
+              supplier={supplier}
               onEdit={setEditPackaging}
               onDelete={setDeletePackagingTarget}
             />
+          </TabsContent>
+
+          <TabsContent value="documents" className="mt-4">
+            {documents.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <FileDown className="size-10 text-muted-foreground/30 mb-3" />
+                <p className="text-sm font-medium text-muted-foreground">Aucun document généré</p>
+                <p className="text-xs text-muted-foreground/70 mt-1">
+                  Générez un Bon de Commande ou de Retour depuis le menu en haut.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-xl border bg-card overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Numéro</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead className="text-right">Lignes</TableHead>
+                      <TableHead className="w-10" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {documents.map((doc) => (
+                      <TableRow key={doc.id}>
+                        <TableCell>
+                          <Badge variant="outline" className={doc.doc_type === "BC" ? "text-blue-600 border-blue-200" : "text-purple-600 border-purple-200"}>
+                            {doc.doc_type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-medium">{doc.number}</TableCell>
+                        <TableCell>{formatDate(doc.date)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{doc.items?.length || 0}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2 justify-end">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                if (doc.doc_type === "BC") {
+                                  exportPurchaseOrderPDF(supplier, doc, doc.items)
+                                } else {
+                                  exportReturnNotePDF(supplier, doc, doc.items)
+                                }
+                              }}
+                            >
+                              Télécharger PDF
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-muted-foreground hover:text-destructive"
+                              onClick={() => setDeleteDocTarget(doc.id)}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       )}
@@ -780,6 +869,18 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
         open={returnDialogOpen}
         onClose={() => setReturnDialogOpen(false)}
         onDone={() => { setReturnDialogOpen(false); load() }}
+      />
+      <GeneratePurchaseOrderDialog
+        supplier={supplier}
+        open={bcDialogOpen}
+        onClose={() => setBcDialogOpen(false)}
+        onDone={() => { setBcDialogOpen(false); load() }}
+      />
+      <GenerateReturnNoteDialog
+        supplier={supplier}
+        open={brDialogOpen}
+        onClose={() => setBrDialogOpen(false)}
+        onDone={() => { setBrDialogOpen(false); load() }}
       />
       <EditShipmentDialog
         shipment={editShipment}
@@ -846,6 +947,29 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog
+        open={!!deleteDocTarget}
+        onOpenChange={(v) => { if (!v) setDeleteDocTarget(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer ce document ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Ce document sera définitivement supprimé. Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteDocTarget && handleDeleteDocument(deleteDocTarget)}
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -877,11 +1001,6 @@ export function Suppliers() {
       .eq("supplier_id", deleteSupplierTarget.id)
 
     if (shipRows && shipRows.length > 0) {
-      // Group reductions per material
-      const reductions = new Map<string, number>()
-      for (const s of shipRows) {
-        reductions.set(s.raw_material_id, (reductions.get(s.raw_material_id) ?? 0) + s.quantity)
-      }
       // Find and delete linked stock_movements
       const shipIds = shipRows.map((s) => s.id)
       const { data: movRows } = await supabase
@@ -890,20 +1009,6 @@ export function Suppliers() {
         .in("shipment_id", shipIds)
       if (movRows && movRows.length > 0) {
         await supabase.from("stock_movements").delete().in("id", movRows.map((m) => m.id))
-      }
-      // Adjust material quantities
-      for (const [matId, totalReduction] of reductions) {
-        const { data: mat } = await supabase
-          .from("raw_materials")
-          .select("current_quantity")
-          .eq("id", matId)
-          .single()
-        if (mat) {
-          await supabase
-            .from("raw_materials")
-            .update({ current_quantity: Math.max(0, mat.current_quantity - totalReduction) })
-            .eq("id", matId)
-        }
       }
     }
 

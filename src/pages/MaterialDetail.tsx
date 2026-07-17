@@ -264,20 +264,26 @@ export function MaterialDetail({
     React.useState<MovementWithBalance | null>(null);
   const [deletingMovement, setDeletingMovement] = React.useState(false);
 
-  React.useEffect(() => {
-    setMaterial(initialMaterial);
-  }, [initialMaterial]);
+
 
   async function loadMovements(freshQty?: number) {
     setLoading(true);
     const currentQty =
       freshQty !== undefined ? freshQty : Number(material.current_quantity);
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("stock_movements")
       .select("*")
       .eq("raw_material_id", material.id)
-      .order("date", { ascending: true });
+      .order("date", { ascending: true })
+      .order("id", { ascending: true });
+
+    if (error) {
+      console.error("Failed to load movements:", error);
+      setAllMovements([]);
+      setLoading(false);
+      return;
+    }
 
     const movements = (data as StockMovement[]) ?? [];
 
@@ -308,9 +314,12 @@ export function MaterialDetail({
       .eq("id", material.id)
       .single();
     if (data) {
-      setMaterial(data as RawMaterial);
-      onUpdated(data as RawMaterial);
+      const mat = { ...data, current_quantity: Number(data.current_quantity) } as RawMaterial;
+      setMaterial(mat);
+      onUpdated(mat);
+      return mat;
     }
+    return null;
   }
 
   React.useEffect(() => {
@@ -351,8 +360,8 @@ export function MaterialDetail({
     return [...filtered].sort((a, b) => {
       const dateCompare = b.date.localeCompare(a.date);
       if (dateCompare !== 0) return dateCompare;
-      // Same date - maintain original order (chronological)
-      return 0;
+      // Same date - maintain deterministic order (id descending to match newest first)
+      return b.id.localeCompare(a.id);
     });
   }, [allMovements, currentMonth]);
 
@@ -395,7 +404,7 @@ export function MaterialDetail({
   const byDay = React.useMemo(() => {
     const map = new Map<string, MovementWithBalance[]>();
     for (const m of monthMovements) {
-      const key = fmtDate(m.date);
+      const key = m.date.slice(0, 10);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(m);
     }
@@ -420,38 +429,14 @@ export function MaterialDetail({
     if (!deleteMovementTarget) return;
     setDeletingMovement(true);
 
-    const qty = Number(deleteMovementTarget.quantity);
-    const oldDelta = deleteMovementTarget.movement_type === "IN" ? qty : -qty;
-
-    // Delete the movement
     const { error: delErr } = await supabase
       .from("stock_movements")
       .delete()
       .eq("id", deleteMovementTarget.id);
 
-    if (delErr) {
-      setDeletingMovement(false);
-      return;
-    }
-
-    // Adjust material quantity by reversing the deleted movement's delta
-    const { data: mat } = await supabase
-      .from("raw_materials")
-      .select("current_quantity")
-      .eq("id", material.id)
-      .single();
-
-    if (mat) {
-      const newQty = Math.max(0, Number(mat.current_quantity) - oldDelta);
-      await supabase
-        .from("raw_materials")
-        .update({ current_quantity: newQty })
-        .eq("id", material.id);
-      await loadMovements(newQty);
-      await reloadMaterial();
-    } else {
-      await loadMovements();
-      await reloadMaterial();
+    if (!delErr) {
+      const freshMat = await reloadMaterial();
+      await loadMovements(freshMat?.current_quantity);
     }
 
     setDeletingMovement(false);
@@ -488,6 +473,48 @@ export function MaterialDetail({
     setCurrentMonth(`${ny}-${String(nm).padStart(2, "0")}`);
   }
 
+  let packagingDisplay: React.ReactNode = null;
+  if (material.packaging_level1_label && material.packaging_level1_size) {
+    const l1s = material.packaging_level1_size;
+    const l2s = material.packaging_level2_size;
+    const l2label = material.packaging_level2_label;
+    const qty = material.current_quantity;
+
+    let displayString = "";
+    let subtext = "";
+
+    if (l2s && l2label) {
+      const unitsPerLevel2 = l1s * l2s;
+      const level2Count = Math.floor(qty / unitsPerLevel2);
+      const remainderAfterLevel2 = qty % unitsPerLevel2;
+      const level1Count = Math.floor(remainderAfterLevel2 / l1s);
+      const remainder = Number((remainderAfterLevel2 % l1s).toFixed(2));
+      
+      displayString = `${level2Count} ${l2label}(s) · ${level1Count} ${material.packaging_level1_label}(s)`;
+      subtext = `+${remainder} ${material.unit_of_measure}`;
+    } else {
+      const level1Count = Math.floor(qty / l1s);
+      const remainder = Number((qty % l1s).toFixed(2));
+      displayString = `${level1Count} ${material.packaging_level1_label}(s)`;
+      subtext = `+${remainder} ${material.unit_of_measure}`;
+    }
+
+    packagingDisplay = (
+      <div className="rounded-xl border bg-card px-4 py-3">
+        <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+          <Package className="size-3" />
+          Packaging
+        </div>
+        <div className="text-sm font-semibold truncate" title={displayString}>
+          {displayString}
+        </div>
+        <div className="text-xs text-muted-foreground mt-0.5">
+          {subtext}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6 p-6 max-w-5xl mx-auto w-full">
       {/* Header */}
@@ -512,7 +539,7 @@ export function MaterialDetail({
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
         <div className="rounded-xl border bg-card px-4 py-3">
           <div className="text-xs text-muted-foreground mb-1">
             Current Stock
@@ -554,6 +581,7 @@ export function MaterialDetail({
           </div>
           <div className="text-xl font-semibold">{allMovements.length}</div>
         </div>
+        {packagingDisplay}
       </div>
 
       {/* Forecast chart */}
@@ -642,7 +670,7 @@ export function MaterialDetail({
                       <TableRow className="bg-muted/30 hover:bg-muted/30">
                         <TableCell colSpan={6} className="py-1.5">
                           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                            {day}
+                            {fmtDate(day + "T12:00:00")}
                           </span>
                         </TableCell>
                       </TableRow>
