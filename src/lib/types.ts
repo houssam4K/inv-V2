@@ -98,7 +98,7 @@ export const PACKAGING_TYPES: { value: PackagingType; label: string }[] = [
 export interface PackagingTransaction {
   id: string
   supplier_id: string
-  transaction_type: "SENT" | "RETURNED"
+  transaction_type: "SENT" | "RETURNED" | "ADJUSTMENT"
   packaging_type: PackagingType
   quantity: number
   date: string

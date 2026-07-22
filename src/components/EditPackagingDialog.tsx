@@ -29,7 +29,7 @@ interface Props {
 }
 
 export function EditPackagingDialog({ transaction, open, onClose, onSaved }: Props) {
-  const [transactionType, setTransactionType] = React.useState<"SENT" | "RETURNED">("SENT")
+  const [transactionType, setTransactionType] = React.useState<"SENT" | "RETURNED" | "ADJUSTMENT">("SENT")
   const [packagingType, setPackagingType] = React.useState<PackagingType>("box")
   const [quantity, setQuantity] = React.useState("")
   const [date, setDate] = React.useState("")
@@ -53,7 +53,9 @@ export function EditPackagingDialog({ transaction, open, onClose, onSaved }: Pro
     setError("")
 
     const qty = parseInt(quantity, 10)
-    if (isNaN(qty) || qty <= 0) { setError("Quantity must be a positive integer."); return }
+    if (isNaN(qty)) { setError("Quantity must be a valid integer."); return }
+    if (transactionType !== "ADJUSTMENT" && qty <= 0) { setError("Quantity must be a positive integer."); return }
+    if (transactionType === "ADJUSTMENT" && qty === 0) { setError("Adjustment quantity cannot be zero."); return }
     if (!date) { setError("Date is required."); return }
 
     setLoading(true)
@@ -89,15 +91,16 @@ export function EditPackagingDialog({ transaction, open, onClose, onSaved }: Pro
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
               <Label>Type</Label>
-              <Select value={transactionType} onValueChange={(v) => setTransactionType(v as "SENT" | "RETURNED")}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="SENT">Sent</SelectItem>
-                  <SelectItem value="RETURNED">Returned</SelectItem>
-                </SelectContent>
-              </Select>
+                <Select value={transactionType} onValueChange={(v) => setTransactionType(v as "SENT" | "RETURNED" | "ADJUSTMENT")}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="SENT">Sent</SelectItem>
+                    <SelectItem value="RETURNED">Returned</SelectItem>
+                    <SelectItem value="ADJUSTMENT">Adjustment</SelectItem>
+                  </SelectContent>
+                </Select>
             </div>
             <div className="flex flex-col gap-2">
               <Label>Packaging</Label>
@@ -119,7 +122,7 @@ export function EditPackagingDialog({ transaction, open, onClose, onSaved }: Pro
               <Input
                 id="epkg-qty"
                 type="number"
-                min="1"
+                min={transactionType === "ADJUSTMENT" ? undefined : "1"}
                 step="1"
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}

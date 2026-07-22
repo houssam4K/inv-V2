@@ -268,8 +268,19 @@ export function MaterialDetail({
 
   async function loadMovements(freshQty?: number) {
     setLoading(true);
-    const currentQty =
+    let currentQty =
       freshQty !== undefined ? freshQty : Number(material.current_quantity);
+      
+    if (freshQty === undefined) {
+      const { data: freshMat } = await supabase
+        .from("raw_materials")
+        .select("current_quantity")
+        .eq("id", material.id)
+        .single();
+      if (freshMat) {
+        currentQty = Number(freshMat.current_quantity);
+      }
+    }
 
     const { data, error } = await supabase
       .from("stock_movements")
@@ -373,12 +384,11 @@ export function MaterialDetail({
 
     if (chronMovements.length > 0) {
       const firstOfMonth = chronMovements[0];
-      return (
-        firstOfMonth.balanceAfter -
+      const startStock = firstOfMonth.balanceAfter -
         (firstOfMonth.movement_type === "IN"
           ? Number(firstOfMonth.quantity)
-          : -Number(firstOfMonth.quantity))
-      );
+          : -Number(firstOfMonth.quantity));
+      return Number(startStock.toFixed(2));
     }
 
     // If no movements this month, find the last movement BEFORE this month
@@ -386,7 +396,7 @@ export function MaterialDetail({
       (m) => monthKey(m.date) < currentMonth,
     );
     if (priorMovements.length > 0) {
-      return priorMovements[priorMovements.length - 1].balanceAfter;
+      return Number(priorMovements[priorMovements.length - 1].balanceAfter.toFixed(2));
     }
 
     // No prior movements.
@@ -397,7 +407,7 @@ export function MaterialDetail({
         (m.movement_type === "IN" ? Number(m.quantity) : -Number(m.quantity)),
       0,
     );
-    return Number(material.current_quantity) - totalDelta;
+    return Number((Number(material.current_quantity) - totalDelta).toFixed(2));
   }, [allMovements, currentMonth, material.current_quantity]);
 
   // Group movements by day for the table display (newest day first)
@@ -486,15 +496,15 @@ export function MaterialDetail({
     if (l2s && l2label) {
       const unitsPerLevel2 = l1s * l2s;
       const level2Count = Math.floor(qty / unitsPerLevel2);
-      const remainderAfterLevel2 = qty % unitsPerLevel2;
+      const remainderAfterLevel2 = qty - level2Count * unitsPerLevel2;
       const level1Count = Math.floor(remainderAfterLevel2 / l1s);
-      const remainder = Number((remainderAfterLevel2 % l1s).toFixed(2));
+      const remainder = Number((remainderAfterLevel2 - level1Count * l1s).toFixed(2));
       
       displayString = `${level2Count} ${l2label}(s) · ${level1Count} ${material.packaging_level1_label}(s)`;
       subtext = `+${remainder} ${material.unit_of_measure}`;
     } else {
       const level1Count = Math.floor(qty / l1s);
-      const remainder = Number((qty % l1s).toFixed(2));
+      const remainder = Number((qty - level1Count * l1s).toFixed(2));
       displayString = `${level1Count} ${material.packaging_level1_label}(s)`;
       subtext = `+${remainder} ${material.unit_of_measure}`;
     }

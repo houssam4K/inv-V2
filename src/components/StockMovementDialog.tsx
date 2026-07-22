@@ -62,12 +62,6 @@ export function StockMovementDialog({ material, type, onClose, onDone }: Props) 
       return
     }
 
-    if (type === "OUT" && qty > material!.current_quantity) {
-      setError(
-        `Cannot subtract ${qty} ${material!.unit_of_measure} — only ${material!.current_quantity} ${material!.unit_of_measure} in stock.`
-      )
-      return
-    }
 
     setLoading(true)
 

@@ -74,7 +74,15 @@ export function EditStockMovementDialog({ movement, open, onClose, onSaved }: Pr
       })
       .eq("id", movement!.id)
 
-    if (movErr) { setError(movErr.message); setLoading(false); return }
+    if (movErr) {
+      if (movErr.message.includes("current_quantity_non_negative")) {
+        setError(`Cannot update to this quantity — it would cause stock to go negative.`)
+      } else {
+        setError(movErr.message)
+      }
+      setLoading(false)
+      return
+    }
 
     setLoading(false)
     onSaved()

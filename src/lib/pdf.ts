@@ -274,7 +274,10 @@ export function exportPackagingPDF(
     const returned = transactions
       .filter((t) => t.packaging_type === pt.value && t.transaction_type === "RETURNED")
       .reduce((a, t) => a + t.quantity, 0)
-    return { label: pt.label, sent, returned, balance: sent - returned }
+    const adjustments = transactions
+      .filter((t) => t.packaging_type === pt.value && t.transaction_type === "ADJUSTMENT")
+      .reduce((a, t) => a + t.quantity, 0)
+    return { label: pt.label, sent, returned, balance: sent - returned + adjustments }
   })
 
   cursor += 4
@@ -319,7 +322,7 @@ export function exportPackagingPDF(
     cursor += 4
 
     // Grouping
-    const groups: Record<string, { date: string; bon_number: string | null; type: "SENT" | "RETURNED"; qtys: Record<string, number> }> = {}
+    const groups: Record<string, { date: string; bon_number: string | null; type: "SENT" | "RETURNED" | "ADJUSTMENT"; qtys: Record<string, number> }> = {}
     
     transactions.forEach(t => {
       const key = t.batch_id || `${t.date}-${t.transaction_type}`
@@ -344,8 +347,11 @@ export function exportPackagingPDF(
       body: sortedGroups.map((g) => [
         fmtDate(g.date),
         g.bon_number || "—",
-        g.type === "SENT" ? "Envoi" : "Retour",
-        ...PACKAGING_TYPES.map(pt => g.qtys[pt.value] ? String(g.qtys[pt.value]) : "")
+        g.type === "SENT" ? "Envoi" : g.type === "RETURNED" ? "Retour" : "Ajustement",
+        ...PACKAGING_TYPES.map(pt => {
+          if (!g.qtys[pt.value]) return ""
+          return (g.type === "ADJUSTMENT" && g.qtys[pt.value] > 0) ? `+${g.qtys[pt.value]}` : String(g.qtys[pt.value])
+        })
       ]),
       headStyles: { fillColor: [32, 32, 32], fontSize: 8, fontStyle: "bold" },
       bodyStyles: { fontSize: 8 },
@@ -353,7 +359,7 @@ export function exportPackagingPDF(
       didParseCell: (data) => {
         if (data.section === "body" && data.column.index === 2) {
           const val = data.cell.raw as string
-          data.cell.styles.textColor = val === "Envoi" ? [40, 80, 160] : [30, 130, 80]
+          data.cell.styles.textColor = val === "Envoi" ? [40, 80, 160] : val === "Retour" ? [30, 130, 80] : [180, 120, 20]
           data.cell.styles.fontStyle = "bold"
         }
       },

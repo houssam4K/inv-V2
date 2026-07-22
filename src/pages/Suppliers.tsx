@@ -56,11 +56,13 @@ import { EditShipmentDialog, type ShipmentEditRow } from "@/components/EditShipm
 import { EditPackagingDialog } from "@/components/EditPackagingDialog"
 import { NewShipmentDialog } from "@/components/NewShipmentDialog"
 import { ReturnPackagingDialog } from "@/components/ReturnPackagingDialog"
+import { SetPackagingCountDialog } from "@/components/SetPackagingCountDialog"
 import { GeneratePurchaseOrderDialog } from "@/components/GeneratePurchaseOrderDialog"
 import { GenerateReturnNoteDialog } from "@/components/GenerateReturnNoteDialog"
 import { supabase } from "@/lib/supabase"
 import {
   PACKAGING_TYPES,
+  type PackagingType,
   type PackagingTransaction,
   type Supplier,
   type SupplierDocument,
@@ -256,12 +258,14 @@ function PackagingBalanceSection({
   supplier,
   onEdit,
   onDelete,
+  onSetCount,
 }: {
   transactions: PackagingTransaction[]
   filteredTransactions: PackagingTransaction[]
   supplier: Supplier
   onEdit: (t: PackagingTransaction) => void
   onDelete: (t: PackagingTransaction) => void
+  onSetCount: (pt: PackagingType, bal: number) => void
 }) {
   // Balance always uses all-time data
   const balance: PackagingBalance[] = PACKAGING_TYPES.map((pt) => {
@@ -271,7 +275,10 @@ function PackagingBalanceSection({
     const returned = transactions
       .filter((t) => t.packaging_type === pt.value && t.transaction_type === "RETURNED")
       .reduce((acc, t) => acc + t.quantity, 0)
-    return { type: pt.value, label: pt.label, sent, returned, balance: sent - returned }
+    const adjustments = transactions
+      .filter((t) => t.packaging_type === pt.value && t.transaction_type === "ADJUSTMENT")
+      .reduce((acc, t) => acc + t.quantity, 0)
+    return { type: pt.value, label: pt.label, sent, returned, balance: sent - returned + adjustments }
   })
 
   // History uses filtered data (by month), sorted newest first, each row = one transaction
@@ -303,7 +310,12 @@ function PackagingBalanceSection({
       <div className="grid grid-cols-3 gap-3">
         {balance.map((b) => (
           <div key={b.type} className="rounded-xl border bg-card p-4 flex flex-col gap-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{b.label}</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{b.label}</p>
+              <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 text-muted-foreground hover:text-foreground" onClick={() => onSetCount(b.type as PackagingType, b.balance)}>
+                Set count
+              </Button>
+            </div>
             <div className="grid grid-cols-3 gap-1 text-center mt-1">
               <div>
                 <div className="text-base font-semibold tabular-nums">{b.sent}</div>
@@ -351,6 +363,7 @@ function PackagingBalanceSection({
               <TableBody>
                 {sortedHistory.map((t) => {
                   const isSent = t.transaction_type === "SENT"
+                  const isAdj = t.transaction_type === "ADJUSTMENT"
                   const pkgLabel = PACKAGING_TYPES.find((pt) => pt.value === t.packaging_type)?.label ?? t.packaging_type
                   return (
                     <TableRow key={t.id}>
@@ -361,14 +374,18 @@ function PackagingBalanceSection({
                           className={`text-xs ${
                             isSent
                               ? "text-blue-600 border-blue-200 dark:text-blue-400 dark:border-blue-900"
+                              : isAdj
+                              ? "text-amber-600 border-amber-200 dark:text-amber-400 dark:border-amber-900"
                               : "text-emerald-600 border-emerald-200 dark:text-emerald-400 dark:border-emerald-900"
                           }`}
                         >
-                          {isSent ? "Sent" : "Returned"}
+                          {isSent ? "Sent" : isAdj ? "Adjustment" : "Returned"}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm">{pkgLabel}</TableCell>
-                      <TableCell className="text-right tabular-nums font-medium">{t.quantity}</TableCell>
+                      <TableCell className={`text-right tabular-nums font-medium ${isAdj ? (t.quantity > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive") : ""}`}>
+                        {isAdj && t.quantity > 0 ? `+${t.quantity}` : t.quantity}
+                      </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{t.note ?? "—"}</TableCell>
                       <TableCell>
                         <DropdownMenu>
@@ -447,6 +464,9 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
   const [brDialogOpen, setBrDialogOpen] = React.useState(false)
   const [documents, setDocuments] = React.useState<(SupplierDocument & { items: SupplierDocumentItem[] })[]>([])
   const [deleteDocTarget, setDeleteDocTarget] = React.useState<string | null>(null)
+  const [countDialogOpen, setCountDialogOpen] = React.useState(false)
+  const [countPkgType, setCountPkgType] = React.useState<PackagingType | null>(null)
+  const [countBalance, setCountBalance] = React.useState(0)
   const [selectedMonth, setSelectedMonth] = React.useState(() => {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
@@ -479,8 +499,6 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
 
   React.useEffect(() => { load() }, [supplier.id])
 
-  const totalSpend = shipments.reduce((acc, s) => acc + s.quantity * s.unit_price, 0)
-
   // Map shipment_id → SENT packaging for inline display in the shipment table
   const packagingByShipment = React.useMemo(() => {
     const map = new Map<string, PackagingTransaction[]>()
@@ -497,6 +515,8 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
     () => shipments.filter((s) => s.date.slice(0, 7) === selectedMonth),
     [shipments, selectedMonth]
   )
+
+  const totalSpend = filteredShipments.reduce((acc, s) => acc + s.quantity * s.unit_price, 0)
 
   const filteredPackaging = React.useMemo(
     () => packaging.filter((t) => t.date.slice(0, 7) === selectedMonth),
@@ -521,16 +541,11 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
     if (!deleteShipmentTarget) return
     setDeletingShipment(true)
 
-    // Delete the associated stock movement
-    const { data: movRows } = await supabase
+    // Delete ALL associated stock movements (not just one)
+    await supabase
       .from("stock_movements")
-      .select("id")
+      .delete()
       .eq("shipment_id", deleteShipmentTarget.id)
-      .limit(1)
-
-    if (movRows && movRows.length > 0) {
-      await supabase.from("stock_movements").delete().eq("id", movRows[0].id)
-    }
 
     // Explicitly delete any packaging transactions tied to this shipment
     // to prevent them from becoming orphaned in the database.
@@ -788,6 +803,11 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
               supplier={supplier}
               onEdit={setEditPackaging}
               onDelete={setDeletePackagingTarget}
+              onSetCount={(type, balance) => {
+                setCountPkgType(type)
+                setCountBalance(balance)
+                setCountDialogOpen(true)
+              }}
             />
           </TabsContent>
 
@@ -915,6 +935,15 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
         </AlertDialogContent>
       </AlertDialog>
 
+      <SetPackagingCountDialog
+        supplier={supplier}
+        packagingType={countPkgType}
+        currentBalance={countBalance}
+        open={countDialogOpen}
+        onClose={() => setCountDialogOpen(false)}
+        onDone={() => { setCountDialogOpen(false); load() }}
+      />
+
       <EditPackagingDialog
         transaction={editPackaging}
         open={!!editPackaging}
@@ -994,21 +1023,30 @@ export function Suppliers() {
     if (!deleteSupplierTarget) return
     setDeletingSupplier(true)
 
-    // Revert stock for all shipments from this supplier
-    const { data: shipRows } = await supabase
-      .from("shipments")
-      .select("id, raw_material_id, quantity")
-      .eq("supplier_id", deleteSupplierTarget.id)
+    // Delete all stock movements linked to this supplier's shipments.
+    // We delete directly by shipment_id and loop to avoid row-limit issues on intermediate SELECTs.
+    let allShipIds: string[] = []
+    let hasMore = true
+    let page = 0
+    while (hasMore) {
+      const { data: shipRows } = await supabase
+        .from("shipments")
+        .select("id")
+        .eq("supplier_id", deleteSupplierTarget.id)
+        .range(page * 1000, (page + 1) * 1000 - 1)
 
-    if (shipRows && shipRows.length > 0) {
-      // Find and delete linked stock_movements
-      const shipIds = shipRows.map((s) => s.id)
-      const { data: movRows } = await supabase
-        .from("stock_movements")
-        .select("id, raw_material_id, quantity")
-        .in("shipment_id", shipIds)
-      if (movRows && movRows.length > 0) {
-        await supabase.from("stock_movements").delete().in("id", movRows.map((m) => m.id))
+      if (shipRows && shipRows.length > 0) {
+        allShipIds.push(...shipRows.map(s => s.id))
+        page++
+      } else {
+        hasMore = false
+      }
+    }
+
+    if (allShipIds.length > 0) {
+      for (let i = 0; i < allShipIds.length; i += 100) {
+        const chunk = allShipIds.slice(i, i + 100)
+        await supabase.from("stock_movements").delete().in("shipment_id", chunk)
       }
     }
 
