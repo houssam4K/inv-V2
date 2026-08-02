@@ -115,7 +115,8 @@ export function drawDocumentHeader(doc: jsPDF, opts: { title: string, supplier: 
   doc.text(`Adresse : ${opts.supplier.address || "—"}`, 14, 63)
   doc.text(`RC : ${opts.supplier.rc || "—"}`, 14, 68)
   doc.text(`N° ART : ${opts.supplier.art_number || "—"}`, 60, 68)
-  doc.text(`NIF : ${opts.supplier.nif || "—"}`, 110, 68)
+  doc.text(`NIS : ${opts.supplier.nis || "—"}`, 110, 68)
+  doc.text(`NIF : ${opts.supplier.nif || "—"}`, 155, 68)
 
   return 76 // return Y cursor after header
 }

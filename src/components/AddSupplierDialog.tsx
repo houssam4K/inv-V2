@@ -27,6 +27,7 @@ export function AddSupplierDialog({ onCreated }: Props) {
   const [nif, setNif] = React.useState("")
   const [rc, setRc] = React.useState("")
   const [artNumber, setArtNumber] = React.useState("")
+  const [nis, setNis] = React.useState("")
   const [address, setAddress] = React.useState("")
   const [error, setError] = React.useState("")
   const [loading, setLoading] = React.useState(false)
@@ -39,6 +40,7 @@ export function AddSupplierDialog({ onCreated }: Props) {
     setNif("")
     setRc("")
     setArtNumber("")
+    setNis("")
     setAddress("")
     setError("")
   }
@@ -59,6 +61,7 @@ export function AddSupplierDialog({ onCreated }: Props) {
       nif: nif.trim() || null,
       rc: rc.trim() || null,
       art_number: artNumber.trim() || null,
+      nis: nis.trim() || null,
       address: address.trim() || null,
     })
     setLoading(false)
@@ -135,7 +138,7 @@ export function AddSupplierDialog({ onCreated }: Props) {
             <Label htmlFor="sup-address">Address (optional)</Label>
             <Input id="sup-address" value={address} onChange={(e) => setAddress(e.target.value)} />
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="sup-rc">RC (optional)</Label>
               <Input id="sup-rc" value={rc} onChange={(e) => setRc(e.target.value)} />
@@ -143,6 +146,10 @@ export function AddSupplierDialog({ onCreated }: Props) {
             <div className="flex flex-col gap-2">
               <Label htmlFor="sup-art">N° ART (optional)</Label>
               <Input id="sup-art" value={artNumber} onChange={(e) => setArtNumber(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="sup-nis">NIS (optional)</Label>
+              <Input id="sup-nis" value={nis} onChange={(e) => setNis(e.target.value)} />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="sup-nif">NIF (optional)</Label>

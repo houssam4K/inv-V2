@@ -609,6 +609,25 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
                 </span>
               )}
             </div>
+            {(supplier.rc || supplier.art_number || supplier.nis || supplier.nif || supplier.address) && (
+              <div className="flex flex-wrap items-center gap-3 mt-1">
+                {supplier.rc && (
+                  <span className="text-xs text-muted-foreground"><span className="font-medium">RC :</span> {supplier.rc}</span>
+                )}
+                {supplier.art_number && (
+                  <span className="text-xs text-muted-foreground"><span className="font-medium">N° ART :</span> {supplier.art_number}</span>
+                )}
+                {supplier.nis && (
+                  <span className="text-xs text-muted-foreground"><span className="font-medium">NIS :</span> {supplier.nis}</span>
+                )}
+                {supplier.nif && (
+                  <span className="text-xs text-muted-foreground"><span className="font-medium">NIF :</span> {supplier.nif}</span>
+                )}
+                {supplier.address && (
+                  <span className="text-xs text-muted-foreground"><span className="font-medium">Adresse :</span> {supplier.address}</span>
+                )}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">

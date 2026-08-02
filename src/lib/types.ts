@@ -71,6 +71,7 @@ export interface Supplier {
   nif: string | null
   rc: string | null
   art_number: string | null
+  nis: string | null
   address: string | null
   created_at: string
 }
