@@ -97,6 +97,7 @@ export function Finance() {
   const [search, setSearch] = React.useState("")
   const [filterSupplier, setFilterSupplier] = React.useState("")
   const [filterMaterial, setFilterMaterial] = React.useState("")
+  const [filterInvoiceType, setFilterInvoiceType] = React.useState<"" | "B" | "F">("")  // B- or F- prefix filter
   const [sortKey, setSortKey] = React.useState<SortKey>("date")
   const [sortDir, setSortDir] = React.useState<SortDir>("desc")
 
@@ -218,6 +219,11 @@ export function Finance() {
     if (filterMaterial) {
       result = result.filter(r => r.raw_materials.name === filterMaterial)
     }
+    if (filterInvoiceType) {
+      result = result.filter(r =>
+        r.invoice_number?.toUpperCase().startsWith(filterInvoiceType + "-")
+      )
+    }
     return [...result].sort((a, b) => {
       let cmp = 0
       if (sortKey === "date") cmp = a.date.localeCompare(b.date)
@@ -225,10 +231,10 @@ export function Finance() {
       else if (sortKey === "total") cmp = (a.quantity * a.unit_price) - (b.quantity * b.unit_price)
       return sortDir === "asc" ? cmp : -cmp
     })
-  }, [rows, search, filterSupplier, filterMaterial, sortKey, sortDir])
+  }, [rows, search, filterSupplier, filterMaterial, filterInvoiceType, sortKey, sortDir])
 
   // Filter-view summary cards (driven by filteredRows for display, NOT changing base totals)
-  const isFiltered = !!search.trim() || !!filterSupplier || !!filterMaterial
+  const isFiltered = !!search.trim() || !!filterSupplier || !!filterMaterial || !!filterInvoiceType
   const filteredSpend = React.useMemo(
     () => filteredRows.reduce((acc, r) => acc + r.quantity * r.unit_price, 0),
     [filteredRows]
@@ -264,6 +270,7 @@ export function Finance() {
     setSearch("")
     setFilterSupplier("")
     setFilterMaterial("")
+    setFilterInvoiceType("")
   }
 
   // ── export (bug fix #4: catch errors) ─────────────────────────────────────
@@ -466,6 +473,16 @@ export function Finance() {
                   >
                     <option value="">All materials</option>
                     {materialOptions.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <select
+                    value={filterInvoiceType}
+                    onChange={e => setFilterInvoiceType(e.target.value as "" | "B" | "F")}
+                    className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    aria-label="Filter by invoice type"
+                  >
+                    <option value="">All invoices</option>
+                    <option value="F">F- (Facture)</option>
+                    <option value="B">B- (Bon)</option>
                   </select>
                   {isFiltered && (
                     <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1 text-xs h-8">
